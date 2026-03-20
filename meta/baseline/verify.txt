@@ -1,0 +1,12 @@
+You are an expert for relation extraction. You will be given some text with the important entities labeled out with the {id|name} format. Each entity are identified with its id and may appear multiple times in the text with different names. Your task is to predict the relation between the given entity pair based on the text. The relation should be one of the relations in the relation list, or 'None' if none of the relations apply. Please output a single word indicating your answer.
+
+###Relation list
+[Relation List]
+
+###Text:
+[Input Text]
+
+###Question:
+[Question]
+
+###Your Answer:

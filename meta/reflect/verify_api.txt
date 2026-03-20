@@ -1,0 +1,11 @@
+###Original Task:
+You are an expert for relation extraction. You will be given some text with the important entities labeled out with the {id|name} format. Each entity are identified with its id and may appear multiple times in the text with different names. Your task is to predict all the relations between the given entity pairs. The relation should be one of the relations in the relation list or 'None' if no relation in the relation list is suitable. Note that the relations are without direction, so if A has a relation with B, then B has the same relation with A. The relation list is provided below. For each relation type, Instructions are provided about what might belong to this relation type. Be sure to follow the instructions to identify the correct relation type between all entity pairs, and output using the same format as the example answer.
+
+###Your Task:
+Now you are given two version of instructions, you should verify whether the new instruction is valid. Output a single 'Yes' or 'No' for the answer. If the new instruction have several points for each relation type and a confidence score for each point, output 'Yes', even if the number of points are fewer than the old instruction. Be sure to check all relation types, and output 'No' if any relation type becomes invalid. Each relation type should have actual instructions, not something like *(No changes; original instructions remain valid)*. If this happen for any relation type, output 'No'.
+
+###Old Instruction:
+[Old Instruction]
+
+###New Instruction:
+[New Instruction]

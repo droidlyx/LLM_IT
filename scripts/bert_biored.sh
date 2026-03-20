@@ -1,0 +1,12 @@
+CUDA_VISIBLE_DEVICES=3 python main.py \
+--data_dir ./dataset/biored \
+--model_type bert \
+--model_name_or_path base_models/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext \
+--train_file bioredirect_train_dev.pubtator \
+--dev_file bioredirect_test.pubtator \
+--test_file bioredirect_bc8_test.pubtator \
+--num_labels 3 \
+--seed 66 \
+--num_class 9 \
+--use_direction False \
+--result_save_path ./results/biored_finetune/bert_no_direction

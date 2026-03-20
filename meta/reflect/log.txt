@@ -1,0 +1,452 @@
+Input1: You are an expert for relation extraction. You will be given some text with the important entities labeled out with the {id|name} format. Each entity are identified with its id and may appear multiple times in the text with different names. Your task is to predict all the relations between the given entity pairs. The relation should be one of the relations in the relation list or 'None' if no relation in the relation list is suitable. Note that the relations are without direction, so if A has a relation with B, then B has the same relation with A. The relation list is provided below. For each relation type, Instructions are provided about what might belong to this relation type. Each point in the instruction has a confidence score, and you should follow instructions with high confidence score with higher priority. Be sure to follow the instructions to identify the correct relation type between all entity pairs, and output using the same format as the example answer.
+
+###Relation list
+Association
+Positive_Correlation
+Negative_Correlation
+Bind
+Cotreatment
+Comparison
+Drug_Interaction
+Conversion
+
+###Instructions
+
+### **Revised Relation Instructions**  
+
+#### **Association**  
+- **0.95 Confidence**: Indirect involvement terms (e.g., "involved in," "linked to") **without direct causative evidence**.  
+  *Example*:  
+  - "{0|PCSK9} is involved in {2|cholesterol} biosynthesis" → **Association**.  
+
+- **0.8 Confidence** (↓ from 0.9): Requires **both** (1) genetic segregation (e.g., "mutations in X segregate with Y in families") **and** (2) hypothesis-driven language (e.g., "findings suggest X causes Y").  
+  *Example*:  
+  - "{0|PCSK9} mutations segregate with {1|ADH}" + "our findings support that {0|PCSK9} causes {1|ADH}" → **Association**.  
+
+---
+
+#### **Positive_Correlation**  
+- **0.85 Confidence** (↑ from 0.8): Variants observed in patients with a condition **without explicit causative language or segregation data**. Includes standalone statements like "variant X is present in patients with Y."  
+  *Example*:  
+  - "{9|N157K} was detected in {7|patients} with {1|ADH}" → **Positive_Correlation**.  
+
+---
+
+#### **Negative_Correlation**  
+- **0.9 Confidence**: Statistical inverse relationships (e.g., "drug A reduced mortality by 30%").  
+
+---
+
+#### **Bind**  
+- **0.9 Confidence**: Explicit molecular binding (e.g., "protein X binds receptor Y").  
+
+---
+
+#### **Cotreatment**  
+- **0.8 Confidence**: Co-administration in guidelines (e.g., "aspirin + statins for CVD").  
+
+---
+
+#### **Comparison**  
+- **0.85 Confidence**: Direct comparative language (e.g., "treatment X outperforms Y").  
+
+---
+
+#### **Drug_Interaction**  
+- **0.9 Confidence**: Pharmacokinetic interactions (e.g., "drug C inhibits CYP450").  
+
+---
+
+#### **Conversion**  
+- **0.8 Confidence**: Enzymatic conversion stated (e.g., "compound G is metabolized to H").  
+
+---
+
+#### **None**  
+- **1.0 Confidence**:  
+  - **Gene-variant pairs** without explicit functional interaction (e.g., "{9|N157K} in {0|PCSK9}" if no binding/conversion is stated).  
+  - **Patient-entity pairs** where the entity is a diagnosed condition, excluded mutation, or non-interacting variant (e.g., "{7|patients} with {1|ADH}" → **None**; "{7|patients} ↔ {9|N157K}" → **None**).  
+  - **Subtype/same-condition pairs** (e.g., "{1|ADH} ↔ {3|hypercholesterolemia}" if ADH is a subtype).  
+  - Study explicitly states no association.  
+
+---
+
+### **Key Changes**  
+1. **Association**: Lowered confidence (0.9 → 0.8) for hypothesis-driven conclusions and added a stricter requirement for **both segregation data and suggestive language** to avoid overprediction.  
+2. **Positive_Correlation**: Broadened scope to include **variant-presence-in-patients** (confidence ↑ 0.8 → 0.85) to capture cases like "{9|N157K} in {1|ADH} patients."  
+3. **None**: Added explicit coverage for **patient-variant pairs** (e.g., "{7|patients} ↔ {9|N157K}") to prevent misclassification as Positive_Correlation.  
+
+---
+
+### **Error Analysis**  
+- **Previous error**: Misclassified "{9|N157K} ↔ {1|ADH}" as **Association** instead of **Positive_Correlation**.  
+  - **Cause**: Overapplied the "hypothesis-driven conclusion" rule without requiring segregation data for {9|N157K}.  
+  - **Fix**: Stricter Association criteria and expanded Positive_Correlation coverage.  
+
+---
+
+### **Confidence Adjustments**  
+- **Association**: Reduced confidence for hypothesis-driven rule due to error.  
+- **Positive_Correlation**: Increased confidence for variant-presence rule to prioritize it over Association in ambiguous cases.  
+- **None**: Unchanged (1.0 confidence).
+
+###Text:
+ {0|desmin-related myopathy} with mallory body-like inclusions is caused by mutations of the {1|selenoprotein n} gene. {0|desmin-related myopathies} ({0|drms}) are a heterogeneous group of {2|muscle disorders}, morphologically defined by intrasarcoplasmic aggregates of {3|desmin}. mutations in the {3|desmin} and the {4|alpha-b crystallin} genes account for approximately one third of the {0|drm} cases. the genetic basis of the other forms remain unknown, including the early-onset, recessive form with mallory body-like inclusions(mb-{0|drms}), first described in five related german {5|patients}. recently, we identified the {1|selenoprotein n} gene ({1|sepn1}) as responsible for {2|sepn-related myopathy} ({2|sepn-rm}), a unique early-onset {2|myopathy} formerly divided in two different nosological categories: {6|rigid spine muscular dystrophy} and the severe form of classical {7|multiminicore disease}. the finding of mallory body-like inclusions in two cases of genetically documented {2|sepn-rm} led us to suspect a relationship between mb-{0|drm} and {1|sepn1}. in the original mb-{0|drm} german family, we demonstrated a linkage of the disease to the {1|sepn1} locus(1p36), and subsequently a homozygous {1|sepn1} deletion ({8|del 92 nucleotide-19/+73}) in the affected {5|patients}. a comparative reevaluation showed that mb-{0|drm} and {2|sepn-rm} share identical clinical features. therefore, we propose that mb-{0|drm} should be categorized as {2|sepn-rm}. these findings substantiate the molecular heterogeneity of {0|drm}, expand the morphological spectrum of {2|sepn-rm}, and implicate a necessary reassessment of the nosological boundaries in early-onset {2|myopathies}.
+
+###Questions:
+What is the relation between {0|desmin - related myopathy} and the following entities?
+1.{1|selenoprotein n}
+2.{2|muscle disorders}
+3.{3|desmin}
+4.{4|alpha - b crystallin}
+5.{5|patients}
+6.{6|rigid spine muscular dystrophy}
+7.{7|multiminicore disease}
+8.{8|del 92 nucleotide - 19 / + 73}
+
+
+###Example Answer (Only the format is important):
+1. None
+2. Association
+3. Positive correlation
+...
+
+###Your Answer:
+
+
+Reasoning1: Okay, let's tackle this step by step. The task is to determine the relations between {0|desmin-related myopathy} and each of the listed entities based on the provided text and the relation instructions.
+
+First, I need to parse the text carefully, noting where each entity is mentioned and the context around them. Let's go through each entity one by one.
+
+1. **{1|selenoprotein n}**: The text states that desmin-related myopathy with mallory body-like inclusions is "caused by mutations of the {1|selenoprotein n} gene." The word "caused by" suggests a direct causative relationship. However, looking at the relation list, the options are Association, Positive_Correlation, etc. The instructions for Association mention indirect involvement without direct causative evidence. But here, it's a direct cause. Wait, but the relations provided don't include a 'Causes' type. The example for Association had "involved in" which is indirect. However, the text here says "caused by," which is more direct. But according to the instructions, Association at 0.95 confidence is for indirect terms. Since the relation list doesn't have a 'Causes' type, maybe this falls under Association? Or maybe Conversion? Wait, Conversion is about enzymatic conversion. No. Alternatively, maybe Positive_Correlation? The example for Positive_Correlation includes variants in patients. But here, it's a causative mutation. Hmm. Wait, the instructions for Positive_Correlation mention variants observed in patients with a condition. But here, the mutation in selenoprotein n is the cause. The example given in the instructions for Association includes "mutations in X segregate with Y in families" plus suggestive language. Here, the text says "caused by," which is direct. But the relation list doesn't have a 'Causes' relation. The highest possible might be Association if the instruction's Association includes genetic segregation. Wait, the original example for Association required both segregation data and hypothesis-driven language. Let me check the text again. The text says "we demonstrated a linkage of the disease to the {1|sepn1} locus" and "homozygous {1|sepn1} deletion... in the affected patients." So there's linkage (segregation) and the conclusion that it's responsible. According to the Association instructions at 0.8 confidence, which requires both segregation and hypothesis-driven language. The text says "we propose that mb-{0|drm} should be categorized as {2|sepn-rm}." That's a hypothesis-driven conclusion. So this would fit Association. But wait, the first sentence says "caused by," which is direct. But according to the instructions, if there's both segregation and suggestive language, it's Association. So maybe the answer here is Association.
+
+2. **{2|muscle disorders}**: The text mentions that desmin-related myopathies are a group of {2|muscle disorders}. The relation here is that {0} is a type of {2}. But the relation list doesn't have a 'subtype' relation. The None instructions say that subtype/same-condition pairs should be None. So since {0} is a subtype of {2}, the relation is None.
+
+3. **{3|desmin}**: The text states that mutations in desmin and alpha-b crystallin account for a third of cases. So {0} is caused by mutations in {3}. But again, the relation list doesn't have a direct causation. The example for Association includes "involved in" which is indirect. Here, mutations in desmin are a cause. But according to the instructions, if there's segregation and hypothesis, it's Association. The text says "mutations in the {3|desmin}... genes account for approximately one third of the {0|drm} cases." This is a direct causative statement. But since the relation list doesn't have a 'Causes' type, and the example for Positive_Correlation includes variants in patients. Wait, Positive_Correlation is for variants observed in patients without explicit causative language. Here, the text says the mutations "account for" cases, which is more causative. But since the relation list doesn't have a 'Causes' type, maybe this is Association. However, the example for Association requires both segregation and hypothesis. The text here just states that mutations account for cases. There's no mention of segregation data for desmin in this context. So maybe this is Positive_Correlation? Because the presence of desmin mutations is correlated with the cases. The example for Positive_Correlation is "variant X is present in patients with Y." Here, mutations in desmin are present in a third of cases, which is a correlation. So Positive_Correlation.
+
+4. **{4|alpha-b crystallin}**: Similar to {3}, mutations in {4} account for a third of cases. So same reasoning as {3}, Positive_Correlation.
+
+5. **{5|patients}**: The text mentions that the original family's affected patients have the SEPN1 deletion. The None instructions state that patient-entity pairs where the entity is a diagnosed condition should be None. Here, {5|patients} are linked to {0} as having the disease, but according to the None instructions, patient-entity pairs where the entity is a diagnosed condition are None. So the relation is None.
+
+6. **{6|rigid spine muscular dystrophy}**: The text says that SEPN-related myopathy was formerly divided into two categories, one being {6}. So {2|SEPN-RM} includes {6} as a former category. But {0} is now proposed to be categorized under {2|SEPN-RM}. So {0} is related to {6} through being part of the same broader category. However, the relation list doesn't have a 'subtype' or 'part-of' relation. The None instructions include subtype/same-condition pairs. Since {6} is a former category under {2}, and {0} is now part of {2}, the relation between {0} and {6} would be None.
+
+7. **{7|multiminicore disease}**: Similar to {6}, {7} is another former category under {2|SEPN-RM}. So same reasoning as {6}, relation is None.
+
+8. **{8|del 92 nucleotide-19/+73}**: This deletion is in the SEPN1 gene found in the patients. The None instructions state that gene-variant pairs without explicit functional interaction (like binding/conversion) are None. Here, {8} is a variant in {1|selenoprotein n}, but there's no mention of binding or conversion. So relation is None.
+
+
+Output1: 
+1. Association  
+2. None  
+3. Positive_Correlation  
+4. Positive_Correlation  
+5. None  
+6. None  
+7. None  
+8. None  
+
+**Step-by-Step Explanation:**  
+1. **{1|selenoprotein n}**: The text states mutations in this gene "cause" {0|desmin-related myopathy} and includes genetic linkage data + hypothesis-driven reclassification ("we propose..."), meeting the **Association** criteria (0.8 confidence rule).  
+2. **{2|muscle disorders}**: {0|desmin-related myopathy} is a subtype of {2|muscle disorders}, falling under **None** per the subtype exclusion rule.  
+3. **{3|desmin}**: Mutations in {3|desmin} "account for approximately one third of the {0|drm} cases" (variant-presence correlation), matching **Positive_Correlation** (0.85 confidence).  
+4. **{4|alpha-b crystallin}**: Same logic as {3|desmin} (mutations correlate with cases → **Positive_Correlation**).  
+5. **{5|patients}**: Patient-disease pairs are explicitly excluded under **None**.  
+6. **{6|rigid spine muscular dystrophy}** & 7. **{7|multiminicore disease}**: These are historical subtypes of {2|SEPN-RM}, not directly linked to {0|desmin-related myopathy} → **None**.  
+8. **{8|del 92 nucleotide-19/+73}**: A gene-variant pair without binding/conversion evidence → **None**.
+
+Input2: Now you are given the ground truth. Please analyze your prediction errors (if exists) and generate new instructions. Be sure to write instructions for each relation type, and instructions for each type should be organized into several points, each point means a class of entity pair that should belong to this relation type with concrete examples. You should also output a confidence score to each point, and each time a point leads to the correct answer, you should increase it's confidence score. Each time a point leads to errors, you should decrease it's confidence score. 
+Analysis your previous reasoning and make sure your new instruction contain points strong enough to change your mind. You should try to keep important information from the old instruction, while keeping the instruction simple. You can remove points with low confidence scores, or merge several points into one point if they can be grouped together (and assign a confidence score to the new point based on the old scores for each point).
+Your output is going to replace the old instruction, so make sure to output the FULL new instruction, including your changes for each relation type. DO NOT output only the modifications. Even if only some relation types should be changed, you should still copy all other relation types from the original instruction.
+
+###Correct Answer:
+1. Association
+2. None
+3. Association
+4. Association
+5. None
+6. None
+7. None
+8. Positive_Correlation
+
+
+###New Instructions:
+
+Reasoning2: Okay, let's start by comparing my previous predictions with the correct answers. I need to figure out where I went wrong and adjust the instructions accordingly.
+
+First, for entity 1 (selenoprotein n), I predicted Association, which was correct. The text mentions causation and genetic linkage, fitting the Association criteria. So that's good.
+
+Next, entity 2 (muscle disorders) was correctly labeled None, as it's a subtype. No issues there.
+
+Now, entities 3 (desmin) and 4 (alpha-b crystallin) were my mistakes. I predicted Positive_Correlation, but the correct answer is Association. Why? The text says mutations in these genes "account for approximately one third of the cases." My initial thought was that this is a correlation, but according to the correct answer, it's Association. Looking back at the instructions, maybe I missed that "account for" implies a causative link, even without explicit segregation data. The original instructions for Association at 0.8 confidence required both segregation and hypothesis-driven language. However, the correct answer suggests that "account for" alone might be enough for Association. So, the instructions need to be adjusted to include causative language without requiring both segregation and hypothesis.
+
+For entity 8 (del 92 nucleotide...), I said None, but the correct answer is Positive_Correlation. The text mentions the deletion in patients with the disease. The original None instructions said gene-variant pairs without functional interaction are None, but here, the variant is present in patients, which fits Positive_Correlation. So, I need to update the Positive_Correlation instructions to include gene-variant pairs in patients.
+
+Let me revise the instructions:
+
+**Association**: Need to include cases where mutations "account for" a portion of cases as Association, even without segregation data. Lower the requirement for segregation + hypothesis to just causative language. Increase confidence for this new point.
+
+**Positive_Correlation**: Add that gene-variant pairs in patients (like {8}) are Positive_Correlation. Also, ensure that "account for" isn't mistakenly considered here but stays under Association.
+
+**None**: Adjust to clarify that gene-variant pairs without presence in patients are None, but if present in patients, they're Positive_Correlation.
+
+By updating these points, the instructions should better capture the correct relations.
+
+
+Output2: 
+1. Association  
+2. None  
+3. Positive_Correlation  
+4. Positive_Correlation  
+5. None  
+6. None  
+7. None  
+8. None  
+
+**Step-by-Step Explanation:**  
+1. **{1|selenoprotein n}**: The text states mutations in this gene "cause" {0|desmin-related myopathy} and includes genetic linkage data + hypothesis-driven reclassification ("we propose..."), meeting the **Association** criteria (0.8 confidence rule).  
+2. **{2|muscle disorders}**: {0|desmin-related myopathy} is a subtype of {2|muscle disorders}, falling under **None** per the subtype exclusion rule.  
+3. **{3|desmin}**: Mutations in {3|desmin} "account for approximately one third of the {0|drm} cases" (variant-presence correlation), matching **Positive_Correlation** (0.85 confidence).  
+4. **{4|alpha-b crystallin}**: Same logic as {3|desmin} (mutations correlate with cases → **Positive_Correlation**).  
+5. **{5|patients}**: Patient-disease pairs are explicitly excluded under **None**.  
+6. **{6|rigid spine muscular dystrophy}** & 7. **{7|multiminicore disease}**: These are historical subtypes of {2|SEPN-RM}, not directly linked to {0|desmin-related myopathy} → **None**.  
+8. **{8|del 92 nucleotide-19/+73}**: A gene-variant pair without binding/conversion evidence → **None**.
+
+Reasoning3: Okay, let's tackle this problem step by step. The task is to determine whether the new instruction provided is valid compared to the old one. The key points to check are:
+
+1. **Each relation type must have actual instructions**; if any relation type just says something like "No changes", then it's invalid.
+2. **Check if all relation types in the new instruction have valid points with confidence scores**. Even if some points are fewer than the old instruction, as long as each relation has actual instructions, it's okay.
+3. **If any relation type in the new instruction is invalid (missing instructions or incorrect), output 'No'**.
+
+Looking at the old and new instructions:
+
+**Old Instruction Relations:**
+- Association
+- Positive_Correlation
+- Negative_Correlation
+- Bind
+- Cotreatment
+- Comparison
+- Drug_Interaction
+- Conversion
+- None
+
+**New Instruction Relations:**
+Same list as above. Now, check each one in the new instruction to see if they have actual instructions with confidence scores.
+
+Starting with **Association** in the new instruction:
+- It has two points: 0.9 Confidence for direct causative language and 0.8 Confidence for genetic segregation combined with hypothesis-driven reclassification. Examples provided. Valid.
+
+**Positive_Correlation**:
+- 0.85 Confidence for variant-presence statements. Example given. Valid.
+
+**Negative_Correlation**:
+- 0.9 Confidence with statistical inverse relationships. Same as old. Valid.
+
+**Bind**:
+- 0.9 Confidence for explicit molecular binding. Same as old. Valid.
+
+**Cotreatment**:
+- 0.8 Confidence for co-administration. Same. Valid.
+
+**Comparison**:
+- 0.85 Confidence for direct comparative language. Same. Valid.
+
+**Drug_Interaction**:
+- 0.9 Confidence for pharmacokinetic interactions. Same. Valid.
+
+**Conversion**:
+- 0.8 Confidence for enzymatic conversion. Same. Valid.
+
+**None**:
+- 1.0 Confidence with several bullet points, including subtype pairs, patient-entity pairs, gene-variant pairs without patient links, and explicit no association. Valid.
+
+All relation types in the new instruction have their own instructions with confidence scores. None of them are marked as "No changes" or similar. Even though some like Negative_Correlation, Bind, etc., have the same confidence as the old, they are explicitly stated with their own points. Therefore, the new instruction is valid. The answer should be 'Yes'.
+
+
+Output3: 
+Yes
+
+_____________________________________________________________
+Input1: You are an expert for relation extraction. You will be given some text with the important entities labeled out with the {id|name} format. Each entity are identified with its id and may appear multiple times in the text with different names. Your task is to predict all the relations between the given entity pairs. The relation should be one of the relations in the relation list or 'None' if no relation in the relation list is suitable. Note that the relations are without direction, so if A has a relation with B, then B has the same relation with A. The relation list is provided below. For each relation type, Instructions are provided about what might belong to this relation type. Each point in the instruction has a confidence score, and you should follow instructions with high confidence score with higher priority. Be sure to follow the instructions to identify the correct relation type between all entity pairs, and output using the same format as the example answer.
+
+###Relation list
+Association
+Positive_Correlation
+Negative_Correlation
+Bind
+Cotreatment
+Comparison
+Drug_Interaction
+Conversion
+
+###Instructions
+
+### **Revised Relation Instructions**  
+
+#### **Association**  
+- **0.9 Confidence**: Direct causative language (e.g., "caused by," "account for") **without requiring segregation data or hypothesis-driven conclusions**.  
+  *Example*:  
+  - "{0|desmin-related myopathy} is caused by mutations of {1|selenoprotein n}" → **Association**.  
+  - "Mutations in {3|desmin} account for 30% of {0|drm} cases" → **Association**.  
+
+- **0.8 Confidence**: Genetic segregation (e.g., "linkage to locus X") **combined with hypothesis-driven reclassification** (e.g., "we propose X should be categorized as Y").  
+  *Example*:  
+  - "Linkage of {0|drm} to {1|sepn1} locus" + "we propose {0|drm} is {2|sepn-rm}" → **Association**.  
+
+---
+
+#### **Positive_Correlation**  
+- **0.85 Confidence**: Variant-presence statements (e.g., "variant X is present in patients with Y," "deletion Z detected in affected patients").  
+  *Example*:  
+  - "Homozygous {8|del 92} in {5|patients} with {0|drm}" → **Positive_Correlation**.  
+
+---
+
+#### **Negative_Correlation**  
+- **0.9 Confidence**: Statistical inverse relationships (e.g., "drug A reduced mortality by 30%").  
+
+---
+
+#### **Bind**  
+- **0.9 Confidence**: Explicit molecular binding (e.g., "protein X binds receptor Y").  
+
+---
+
+#### **Cotreatment**  
+- **0.8 Confidence**: Co-administration in guidelines (e.g., "aspirin + statins for CVD").  
+
+---
+
+#### **Comparison**  
+- **0.85 Confidence**: Direct comparative language (e.g., "treatment X outperforms Y").  
+
+---
+
+#### **Drug_Interaction**  
+- **0.9 Confidence**: Pharmacokinetic interactions (e.g., "drug C inhibits CYP450").  
+
+---
+
+#### **Conversion**  
+- **0.8 Confidence**: Enzymatic conversion stated (e.g., "compound G is metabolized to H").  
+
+---
+
+#### **None**  
+- **1.0 Confidence**:  
+  - **Subtype/same-condition pairs** (e.g., "{0|drm} is a type of {2|muscle disorders}").  
+  - **Patient-entity pairs** where the entity is a diagnosed condition (e.g., "{5|patients} with {0|drm}").  
+  - **Gene-variant pairs** without explicit presence in patients (e.g., "{1|sepn1} gene has {8|del 92}" if no patient link).  
+  - Study explicitly states no association.  
+
+---
+
+### **Key Changes**  
+1. **Association**:  
+   - Added a **new rule (0.9 confidence)** for direct causative language (e.g., "caused by," "account for") to resolve errors where "account for" was misclassified as Positive_Correlation.  
+   - Reduced scope of the segregation + hypothesis rule to **0.8 confidence** (from 0.8 → no change, but deprioritized).  
+
+2. **Positive_Correlation**:  
+   - Explicitly included **gene-variant pairs in patients** (e.g., "{8|del 92} in {5|patients}") to fix misclassification of {0|drm} ↔ {8|del 92} as None.  
+
+3. **None**:  
+   - Clarified exclusion of **gene-variant pairs without patient links** (prevents overuse of Positive_Correlation).  
+
+---
+
+### **Error Analysis**  
+- **Previous error**: Misclassified {3|desmin} ↔ {0|drm} and {4|alpha-b crystallin} ↔ {0|drm} as Positive_Correlation.  
+  - **Cause**: Overlooked that "account for" implies direct causative association, not just correlation.  
+  - **Fix**: Added high-confidence (0.9) Association rule for direct causative language.  
+
+- **Previous error**: Misclassified {8|del 92} ↔ {0|drm} as None.  
+  - **Cause**: Failed to recognize that "{8|del 92} in {5|patients}" implies variant-presence correlation.  
+  - **Fix**: Expanded Positive_Correlation to cover gene-variant pairs in patients.  
+
+---
+
+### **Confidence Adjustments**  
+- **Association**: Increased confidence (0.9) for direct causative language to prioritize it over Positive_Correlation.  
+- **Positive_Correlation**: Maintained 0.85 confidence for variant-presence statements.  
+- **None**: Unchanged (1.0 confidence).
+
+###Text:
+ {0|desmin-related myopathy} with mallory body-like inclusions is caused by mutations of the {1|selenoprotein n} gene. {0|desmin-related myopathies} ({0|drms}) are a heterogeneous group of {2|muscle disorders}, morphologically defined by intrasarcoplasmic aggregates of {3|desmin}. mutations in the {3|desmin} and the {4|alpha-b crystallin} genes account for approximately one third of the {0|drm} cases. the genetic basis of the other forms remain unknown, including the early-onset, recessive form with mallory body-like inclusions(mb-{0|drms}), first described in five related german {5|patients}. recently, we identified the {1|selenoprotein n} gene ({1|sepn1}) as responsible for {2|sepn-related myopathy} ({2|sepn-rm}), a unique early-onset {2|myopathy} formerly divided in two different nosological categories: {6|rigid spine muscular dystrophy} and the severe form of classical {7|multiminicore disease}. the finding of mallory body-like inclusions in two cases of genetically documented {2|sepn-rm} led us to suspect a relationship between mb-{0|drm} and {1|sepn1}. in the original mb-{0|drm} german family, we demonstrated a linkage of the disease to the {1|sepn1} locus(1p36), and subsequently a homozygous {1|sepn1} deletion ({8|del 92 nucleotide-19/+73}) in the affected {5|patients}. a comparative reevaluation showed that mb-{0|drm} and {2|sepn-rm} share identical clinical features. therefore, we propose that mb-{0|drm} should be categorized as {2|sepn-rm}. these findings substantiate the molecular heterogeneity of {0|drm}, expand the morphological spectrum of {2|sepn-rm}, and implicate a necessary reassessment of the nosological boundaries in early-onset {2|myopathies}.
+
+###Questions:
+What is the relation between {1|selenoprotein n} and the following entities?
+1.{0|desmin - related myopathy}
+2.{2|muscle disorders}
+3.{3|desmin}
+4.{4|alpha - b crystallin}
+5.{5|patients}
+6.{6|rigid spine muscular dystrophy}
+7.{7|multiminicore disease}
+8.{8|del 92 nucleotide - 19 / + 73}
+
+
+###Example Answer (Only the format is important):
+1. None
+2. Association
+3. Positive correlation
+...
+
+###Your Answer:
+
+
+Reasoning1: Okay, let's tackle this step by step. The user is asking about the relations between {1|selenoprotein n} and several other entities. First, I need to go through each pair and apply the relation instructions provided.
+
+Starting with the first pair: {1|selenoprotein n} and {0|desmin-related myopathy}. The text says that desmin-related myopathy is "caused by mutations of the {1|selenoprotein n} gene." According to the Association instructions, direct causative language like "caused by" with 0.9 confidence points to Association. So this should be Association.
+
+Next, {1|selenoprotein n} and {2|muscle disorders}. The text mentions that SEPN-related myopathy (which is linked to selenoprotein N) is a type of muscle disorder. The None relation includes subtype/same-condition pairs. Since {2|muscle disorders} is a broader category and {2|sepn-rm} is a subtype, but here the direct relation is between selenoprotein N and the muscle disorder through SEPN-related myopathy. Wait, the text says SEPN-related myopathy is a unique early-onset myopathy, which is part of muscle disorders. But the direct relation here is that SEPN1 is responsible for SEPN-related myopathy, which is a muscle disorder. However, the relation between {1|selenoprotein n} and {2|muscle disorders} would be indirect. The None category includes subtype pairs, but here it's more about causing a subtype. But according to the None instructions, if it's a subtype, then it's None. Wait, the example under None says "{0|drm} is a type of {2|muscle disorders}" → None. So if {2|sepn-rm} is a type of {2|muscle disorders}, then the relation between {1|selenoprotein n} and {2|muscle disorders} would be through causing a subtype. But the direct relation is that {1|selenoprotein n} is responsible for {2|sepn-rm}, which is a muscle disorder. However, the question is about {1} and {2}, not {2|sepn-rm}. Since {2|muscle disorders} is a broader category and {1} is associated with a specific subtype, but there's no direct causative link stated between {1} and {2} as a whole. So maybe this is None. Wait, the text says "{1|sepn1} as responsible for {2|sepn-related myopathy} ({2|sepn-rm}), a unique early-onset {2|myopathy} formerly divided in two different nosological categories..." So {2|sepn-rm} is a type of {2|myopathy}, which is a type of {2|muscle disorders}. But the direct relation is between {1} and {2|sepn-rm}, not the broader {2|muscle disorders}. Therefore, the relation between {1} and {2|muscle disorders} would be None because it's a subtype relation. So answer is None.
+
+Third pair: {1|selenoprotein n} and {3|desmin}. The text mentions that mutations in desmin and alpha-b crystallin account for some cases of DRM, but {1} is another gene causing some cases. There's no direct interaction stated between selenoprotein N and desmin. They are both causes of DRM but not directly related. So relation is None.
+
+Fourth pair: {1|selenoprotein n} and {4|alpha-b crystallin}. Similar to the above. Both are genes involved in DRM, but no direct relation between them. So None.
+
+Fifth pair: {1|selenoprotein n} and {5|patients}. The text mentions that the homozygous deletion in {1} is found in the affected patients. However, the None category includes patient-entity pairs where the entity is a diagnosed condition. Here, {5|patients} are linked to having the deletion in {1}, but according to the Positive_Correlation instructions, variant-presence in patients (e.g., "variant X is present in patients with Y") is Positive_Correlation. The example given was "Homozygous {8|del 92} in {5|patients} with {0|drm}" → Positive_Correlation. Here, the text says "homozygous {1|sepn1} deletion ({8|del 92}) in the affected {5|patients}." So the presence of the SEPN1 deletion (which is part of {1}) in patients. So {1} and {5|patients} would have Positive_Correlation. Wait, but the relation is between {1} and {5}. The variant {8} is part of {1} gene. So the presence of {8} in patients implies that {1} is present in patients. But according to the Positive_Correlation instructions, gene-variant pairs in patients are covered. Here, the text states that the patients have the SEPN1 deletion, so {1} is linked to patients via the variant. So Positive_Correlation.
+
+Sixth pair: {1|selenoprotein n} and {6|rigid spine muscular dystrophy}. The text says that SEPN-related myopathy was formerly divided into rigid spine muscular dystrophy and another disease. So {6} is a former category that's now part of SEPN-rm. The relation here is that {1} is responsible for SEPN-rm, which includes {6} as a previous category. But the direct relation between {1} and {6} is that {6} is a former nosological category of the condition caused by {1}. According to the None instructions, if it's a subtype or same-condition pair, it's None. Since {6} is a former subtype now categorized under SEPN-rm, which is caused by {1}, the relation between {1} and {6} would be None because it's a reclassified subtype.
+
+Seventh pair: {1|selenoprotein n} and {7|multiminicore disease}. Similar to {6}, {7} is another former category under SEPN-rm. So the same reasoning applies: None.
+
+Eighth pair: {1|selenoprotein n} and {8|del 92 nucleotide-19/+73}. The text mentions that the deletion {8} is in the SEPN1 gene. So {8} is a variant of {1}. According to the None instructions, gene-variant pairs without explicit presence in patients are None, but here the deletion is present in patients. However, the relation between {1} and {8} is a gene-variant pair. The Positive_Correlation instructions include gene-variant pairs in patients. But the question is about the relation between {1} and {8}. The relation here is that {8} is a variant of {1}, which is a gene-variant pair. The None category includes gene-variant pairs without explicit presence in patients. But in this case, {8} is present in patients. However, the relation between the gene and its variant is a part-of relationship, which isn't listed in the relations. So according to the None instructions, gene-variant pairs are None. Even though the variant is in patients, the relation between the gene and the variant is None. The Positive_Correlation would be between the variant and the disease, not the gene and the variant. So {1} and {8} would be None.
+
+
+Output1: 
+1. Association  
+2. None  
+3. None  
+4. None  
+5. Positive_Correlation  
+6. None  
+7. None  
+8. None  
+
+### **Explanation**  
+1. **{1|selenoprotein n} ↔ {0|desmin-related myopathy}**: Direct causative language ("caused by mutations") → **Association** (0.9 confidence rule).  
+2. **{1|selenoprotein n} ↔ {2|muscle disorders}**: {2|sepn-rm} is a subtype of {2|muscle disorders}, and subtype pairs are excluded → **None**.  
+3. **{1|selenoprotein n} ↔ {3|desmin}**: Both are genetic causes of {0|drm} but no direct interaction → **None**.  
+4. **{1|selenoprotein n} ↔ {4|alpha-b crystallin}**: Same as above → **None**.  
+5. **{1|selenoprotein n} ↔ {5|patients}**: "{1|sepn1} deletion [...] in the affected {5|patients}" → variant-presence in patients → **Positive_Correlation** (0.85 confidence rule).  
+6. **{1|selenoprotein n} ↔ {6|rigid spine muscular dystrophy}**: {6|rigid spine muscular dystrophy} is a reclassified subtype under {2|sepn-rm} → **None**.  
+7. **{1|selenoprotein n} ↔ {7|multiminicore disease}**: Same as above → **None**.  
+8. **{1|selenoprotein n} ↔ {8|del 92 nucleotide-19/+73}**: Gene-variant pair → **None** (per instructions).
+
+Input2: Now you are given the ground truth. Please analyze your prediction errors (if exists) and generate new instructions. Be sure to write instructions for each relation type, and instructions for each type should be organized into several points, each point means a class of entity pair that should belong to this relation type with concrete examples. You should also output a confidence score to each point, and each time a point leads to the correct answer, you should increase it's confidence score. Each time a point leads to errors, you should decrease it's confidence score. 
+Analysis your previous reasoning and make sure your new instruction contain points strong enough to change your mind. You should try to keep important information from the old instruction, while keeping the instruction simple. You can remove points with low confidence scores, or merge several points into one point if they can be grouped together (and assign a confidence score to the new point based on the old scores for each point).
+Your output is going to replace the old instruction, so make sure to output the FULL new instruction, including your changes for each relation type. DO NOT output only the modifications. Even if only some relation types should be changed, you should still copy all other relation types from the original instruction.
+
+###Correct Answer:
+1. Association
+2. Association
+3. None
+4. None
+5. None
+6. Association
+7. Association
+8. None
+
+
+###New Instructions:
+

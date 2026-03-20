@@ -1,0 +1,48 @@
+
+### Revised Relation Instructions (Final)  
+
+**Association**  
+1. Use when entities are explicitly stated to be linked through epidemiological, genetic, or mechanistic relationships **in study findings** (e.g., "gene X is associated with disease Y in our cohort" or "smoking correlates with lung cancer in the analysis").  
+2. If the text explicitly negates an association (e.g., "no association found," "not linked," "not associated with"), assign **None** even if entities are contextually related.  
+   - Example: "Mutations in HNF-6 are **not associated** with type II diabetes" → **None** for {4|mody} → {1|type II diabetes}.  
+3. **Clarification**: Do not infer associations for:  
+   - Entities merely listed together in a study (e.g., "tested MODY1, MODY3, and MODY4 genes" → no direct association between MODY subtypes unless explicitly stated).  
+   - Categorical descriptions of patient groups (e.g., "patients with type II diabetes" → **None** for {7|patients} → {1|type II diabetes}, unless the study explicitly links patient characteristics to the condition mechanistically).  
+4. **Clarification**: Hierarchical or categorical relationships (e.g., disease subtypes, gene families) do not qualify as **Association** unless explicitly framed as an epidemiological, genetic, or mechanistic link.  
+   - Example: "MODY is a subtype of diabetes" → **None** for {6|mody} → {1|type II diabetes}.  
+
+---
+
+**Positive_Correlation**  
+1. Use when two variables increase/decrease together with statistical evidence (e.g., "higher insulin levels correlate with glucose tolerance").  
+2. Requires explicit mention of statistical trends (e.g., "positive correlation," "r = 0.8"). Do not infer from contextual proximity alone.  
+
+**Negative_Correlation**  
+1. Use when one variable increases as the other decreases with statistical evidence (e.g., "lower insulin secretion correlates with higher glucose levels").  
+2. Requires explicit inverse trends (e.g., "negative correlation," "p < 0.05").  
+
+**Bind**  
+1. Use for molecular binding interactions (e.g., "drug X binds to receptor Y" or "lectin displays mannose-binding specificity").  
+2. Includes direct protein-ligand, protein-carbohydrate, or receptor-substrate interactions described with binding-related terms (e.g., "binds to," "binding specificity," "interacts with").  
+3. Exclude indirect interactions (e.g., "regulates" ≠ "binds").  
+
+**Cotreatment**  
+1. Use when two therapies are used together for a condition (e.g., "aspirin and statins are co-administered").  
+2. Requires explicit mention of combined use.  
+
+**Comparison**  
+1. Use when entities are directly compared (e.g., "MODY3 is more severe than MODY1").  
+2. Exclude implicit contrasts without explicit comparative language.  
+
+**Drug_Interaction**  
+1. Use for pharmacological interactions (e.g., "drug X inhibits drug Y’s metabolism").  
+2. Requires mechanistic/pharmacokinetic evidence.  
+
+**Conversion**  
+1. Use for biochemical transformations (e.g., "glucose is converted to glycogen").  
+2. Requires explicit mention of transformation.  
+
+---
+
+### Key Changes:  
+- **No modifications made**. The original instructions already explicitly covered the "mannose-binding specificity" → **Bind** case through the example "lectin displays mannose-binding specificity." All other instructions remain unchanged as no prediction errors occurred.

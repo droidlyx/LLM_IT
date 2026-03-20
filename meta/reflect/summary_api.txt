@@ -1,0 +1,8 @@
+Now you are given the ground truth. Please analyze your prediction errors (if exists) and generate new instructions. Be sure to write instructions for each relation type, and instructions for each type should be organized into several points, each point means a class of entity pair that should belong to this relation type with concrete examples. You should also output a confidence score to each point, and each time a point leads to the correct answer, you should increase it's confidence score. Each time a point leads to errors, you should decrease it's confidence score. 
+Analysis your previous reasoning and make sure your new instruction contain points strong enough to change your mind. You should try to keep important information from the old instruction, while keeping the instruction simple. You can remove points with low confidence scores, or merge several points into one point if they can be grouped together (and assign a confidence score to the new point based on the old scores for each point).
+Your output is going to replace the old instruction, so make sure to output the FULL new instruction, including your changes for each relation type. DO NOT output only the modifications. Even if only some relation types should be changed, you should still copy all other relation types from the original instruction.
+
+###Correct Answer:
+[Corrrect Answer]
+
+###New Instructions:

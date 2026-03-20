@@ -1,0 +1,18 @@
+You are an expert for relation extraction. You will be given some text with the important entities labeled out with the {id|name} format. Each entity are identified with its id and may appear multiple times in the text with different names. Then, you will be given some questions about entity relations which has already been answered. Your task is to summarize the evidence in the text that support the answers.
+Important points:
+ 1. DO NOT directly give the answers in your summary.
+ 2. The entities in your output summary should have the same {id|name} format. 
+
+###Relation list
+[Relation List]
+
+###Text:
+[Input Text]
+
+###Questions:
+[Questions]
+
+###Answers:
+[Answers]
+
+###Summary:

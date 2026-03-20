@@ -1,0 +1,27 @@
+You are an expert for relation extraction. You will be given some text with the important entities labeled out with the {id|name} format. Each entity are identified with its id and may appear multiple times in the text with different names. Your task is to predict all the relations between the given entity pairs. For each entity pair, You should output the relation between them in a line. The relation should be one of the relations in the relation list or 'None' if no relation in the relation list is suitable. 
+
+###Relation list
+[Relation List]
+
+###Instructions
+<|reserved_special_token_0|>
+
+###Example Text
+{0|hepatocyte nuclear factor-6}: associations between genetic variability and {1|type ii diabetes} and between genetic variability and estimates of {2|insulin} secretion.
+
+###Example Questions
+What is the relation between {0|hepatocyte nuclear factor - 6} and the following entities?
+1.{1|type ii diabetes}
+2.{2|insulin}
+
+###Example Answer
+1. Association
+2. None
+
+###Text:
+[Input Text]
+
+###Questions:
+[Questions]
+
+###Answer:

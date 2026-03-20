@@ -1,0 +1,89 @@
+
+### **Revised Relation Instructions**  
+
+#### **Association**  
+- **0.9 Confidence**: Direct causative language (e.g., "caused by," "account for") **without requiring segregation data or hypothesis-driven conclusions**.  
+  *Example*:  
+  - "{0|desmin-related myopathy} is caused by mutations of {1|selenoprotein n}" → **Association**.  
+  - "Mutations in {3|desmin} account for 30% of {0|drm} cases" → **Association**.  
+
+- **0.8 Confidence**: Genetic segregation (e.g., "linkage to locus X") **combined with hypothesis-driven reclassification** (e.g., "we propose X should be categorized as Y").  
+  *Example*:  
+  - "Linkage of {0|drm} to {1|sepn1} locus" + "we propose {0|drm} is {2|sepn-rm}" → **Association**.  
+
+---
+
+#### **Positive_Correlation**  
+- **0.85 Confidence**: Variant-presence statements (e.g., "variant X is present in patients with Y," "deletion Z detected in affected patients").  
+  *Example*:  
+  - "Homozygous {8|del 92} in {5|patients} with {0|drm}" → **Positive_Correlation**.  
+
+---
+
+#### **Negative_Correlation**  
+- **0.9 Confidence**: Statistical inverse relationships (e.g., "drug A reduced mortality by 30%").  
+
+---
+
+#### **Bind**  
+- **0.9 Confidence**: Explicit molecular binding (e.g., "protein X binds receptor Y").  
+
+---
+
+#### **Cotreatment**  
+- **0.8 Confidence**: Co-administration in guidelines (e.g., "aspirin + statins for CVD").  
+
+---
+
+#### **Comparison**  
+- **0.85 Confidence**: Direct comparative language (e.g., "treatment X outperforms Y").  
+
+---
+
+#### **Drug_Interaction**  
+- **0.9 Confidence**: Pharmacokinetic interactions (e.g., "drug C inhibits CYP450").  
+
+---
+
+#### **Conversion**  
+- **0.8 Confidence**: Enzymatic conversion stated (e.g., "compound G is metabolized to H").  
+
+---
+
+#### **None**  
+- **1.0 Confidence**:  
+  - **Subtype/same-condition pairs** (e.g., "{0|drm} is a type of {2|muscle disorders}").  
+  - **Patient-entity pairs** where the entity is a diagnosed condition (e.g., "{5|patients} with {0|drm}").  
+  - **Gene-variant pairs** without explicit presence in patients (e.g., "{1|sepn1} gene has {8|del 92}" if no patient link).  
+  - Study explicitly states no association.  
+
+---
+
+### **Key Changes**  
+1. **Association**:  
+   - Added a **new rule (0.9 confidence)** for direct causative language (e.g., "caused by," "account for") to resolve errors where "account for" was misclassified as Positive_Correlation.  
+   - Reduced scope of the segregation + hypothesis rule to **0.8 confidence** (from 0.8 → no change, but deprioritized).  
+
+2. **Positive_Correlation**:  
+   - Explicitly included **gene-variant pairs in patients** (e.g., "{8|del 92} in {5|patients}") to fix misclassification of {0|drm} ↔ {8|del 92} as None.  
+
+3. **None**:  
+   - Clarified exclusion of **gene-variant pairs without patient links** (prevents overuse of Positive_Correlation).  
+
+---
+
+### **Error Analysis**  
+- **Previous error**: Misclassified {3|desmin} ↔ {0|drm} and {4|alpha-b crystallin} ↔ {0|drm} as Positive_Correlation.  
+  - **Cause**: Overlooked that "account for" implies direct causative association, not just correlation.  
+  - **Fix**: Added high-confidence (0.9) Association rule for direct causative language.  
+
+- **Previous error**: Misclassified {8|del 92} ↔ {0|drm} as None.  
+  - **Cause**: Failed to recognize that "{8|del 92} in {5|patients}" implies variant-presence correlation.  
+  - **Fix**: Expanded Positive_Correlation to cover gene-variant pairs in patients.  
+
+---
+
+### **Confidence Adjustments**  
+- **Association**: Increased confidence (0.9) for direct causative language to prioritize it over Positive_Correlation.  
+- **Positive_Correlation**: Maintained 0.85 confidence for variant-presence statements.  
+- **None**: Unchanged (1.0 confidence).

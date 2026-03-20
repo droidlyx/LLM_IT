@@ -1,0 +1,21 @@
+You are an expert for relation extraction. You will be given some text with the important entities labeled out with the {id|name} format. Each entity are identified with its id and may appear multiple times in the text with different names. Your task is to predict all the relations between the given entity pairs. The relation should be one of the relations in the relation list or 'None' if no relation in the relation list is suitable. Note that the relations are without direction, so if A has a relation with B, then B has the same relation with A. The relation list is provided below. For each relation type, Instructions are provided about what might belong to this relation type. Each point in the instruction has a confidence score, and you should follow instructions with high confidence score with higher priority. Be sure to follow the instructions to identify the correct relation type between all entity pairs, and output using the same format as the example answer.
+
+###Relation list
+[Relation list]
+
+###Instructions
+[Instructions]
+
+###Text:
+[Input Text]
+
+###Questions:
+[Questions]
+
+###Example Answer (Only the format is important):
+1. None
+2. Association
+3. Positive correlation
+...
+
+###Your Answer:
