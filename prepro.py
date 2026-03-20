@@ -94,7 +94,7 @@ def read_docred(file_in, tokenizer, max_seq_length=1024, max_samples = None, use
         maxlen = max(maxlen, len(sents))
         sents = sents[:max_seq_length - 2]
         input_ids = tokenizer.convert_tokens_to_ids(sents)
-        input_ids = tokenizer.build_inputs_with_special_tokens(input_ids)
+        input_ids = [tokenizer.cls_token_id] + input_ids + [tokenizer.sep_token_id]
 
         i_line += 1
         feature = {'input_ids': input_ids,
@@ -167,7 +167,7 @@ def read_biored(file_in, tokenizer, max_seq_length=1024, max_samples = None, use
                 'novelty': parts[4] if len(parts) == 5 else None
             })
 
-    f = open(f'dataset/rel_list/{file_in.split('/')[-1].split('.')[0]}_rel_list.txt', 'w', encoding='utf-8')
+    f = open(f'dataset/rel_list/biored_rel_list.txt', 'w', encoding='utf-8')
     for rel in temp_rel_list:
         f.write(f'{rel}\n')
 
@@ -330,7 +330,7 @@ def read_biored(file_in, tokenizer, max_seq_length=1024, max_samples = None, use
             print("\nDocument {} is too long. Truncating.".format(pmid))
         sents = sents[:max_seq_length - 2]
         input_ids = tokenizer.convert_tokens_to_ids(sents)
-        input_ids = tokenizer.build_inputs_with_special_tokens(input_ids)
+        input_ids = [tokenizer.cls_token_id] + input_ids + [tokenizer.sep_token_id]
 
         feature = {
             'input_ids': input_ids,

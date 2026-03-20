@@ -35,12 +35,12 @@ def parse_arguments():
     parser.add_argument("--num_train_epochs", default=2.0, type=float)
     parser.add_argument("--num_examples", default=10, type=int)
     
-    parser.add_argument("--use_direction", default="false", type=str)
-    parser.add_argument("--use_augmented_training", default="false", type=str)
-    parser.add_argument("--use_extra_training_datasets", default="false", type=str)
+    parser.add_argument("--use_direction", action="store_true")
+    parser.add_argument("--use_augmented_training", action="store_true")
+    parser.add_argument("--use_extra_training_datasets", action="store_true")
 
     # WMSS (Weak-Driven Learning) parameters
-    parser.add_argument("--use_wmss", default="false", type=str,
+    parser.add_argument("--use_wmss", action="store_true",
                         help="Enable WMSS training method")
     parser.add_argument("--wmss_lambda", default=0.5, type=float,
                         help="Logit mixing coefficient (0.42-0.48 optimal)")
@@ -81,6 +81,24 @@ def compute_entropy(logits):
     """Compute predictive entropy from logits."""
     probs = F.softmax(logits, dim=-1)
     return -torch.sum(probs * torch.log(probs + 1e-10), dim=-1)
+
+
+def compute_entropy_sequential(model, dataloader, device, desc="Computing entropy"):
+    """Compute entropy for a single model."""
+    model.eval()
+    entropy_list = []
+
+    with torch.no_grad():
+        for batch in tqdm(dataloader, desc=desc):
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+
+            logits = model(input_ids, attention_mask=attention_mask).logits
+            H = compute_entropy(logits)
+
+            entropy_list.append(H.cpu())
+
+    return torch.cat(entropy_list, dim=0)
 
 
 def compute_entropy_dynamics(model_weak, model_strong, dataloader, device):
@@ -126,7 +144,7 @@ def compute_curriculum_weights(entropy_weak, delta_H, alpha=0.1, beta=0.8, gamma
 
 
 def wmss_train(model_strong, model_weak, train_dataset, tokenizer, args):
-    """WMSS joint training via logit mixing."""
+    """WMSS joint training via logit mixing with multi-GPU support."""
     model_weak.eval()
     model_strong.train()
 
@@ -145,6 +163,9 @@ def wmss_train(model_strong, model_weak, train_dataset, tokenizer, args):
 
     dataloader = DataLoader(train_dataset, batch_size=args.llm_train_batch_size, shuffle=True)
 
+    device_strong = args.device  # e.g., cuda:0
+    device_weak = torch.device("cuda:1")  # model_weak on second GPU
+
     for epoch in range(int(epochs_per_iteration)):
         # Handle fractional epoch for last iteration
         if epoch == int(epochs_per_iteration) and epochs_per_iteration % 1 != 0:
@@ -156,13 +177,13 @@ def wmss_train(model_strong, model_weak, train_dataset, tokenizer, args):
             if batch_idx >= max_batches:
                 break
 
-            input_ids = batch['input_ids'].to(args.device)
-            attention_mask = batch['attention_mask'].to(args.device)
-            labels = batch['labels'].to(args.device)
+            input_ids = batch['input_ids'].to(device_strong)
+            attention_mask = batch['attention_mask'].to(device_strong)
+            labels = batch['labels'].to(device_strong)
 
-            # Forward pass - weak model FROZEN
+            # Forward pass - weak model FROZEN (on GPU 1)
             with torch.no_grad():
-                z_weak = model_weak(input_ids, attention_mask=attention_mask).logits
+                z_weak = model_weak(input_ids.to(device_weak), attention_mask=attention_mask.to(device_weak)).logits.to(device_strong)
 
             z_strong = model_strong(input_ids, attention_mask=attention_mask).logits
 
@@ -179,35 +200,31 @@ def wmss_train(model_strong, model_weak, train_dataset, tokenizer, args):
 
     return model_strong
 
+    return model_strong
+
 def finetune_llm_wmss(args, all_queries, tokenizer):
     """Full WMSS training pipeline with curriculum data activation and logit mixing."""
     print("=" * 50)
     print("Starting WMSS (Weak-Driven Learning) Training")
     print("=" * 50)
 
+    # Check for multiple GPUs
+    num_gpus = torch.cuda.device_count()
+    use_multi_gpu = num_gpus > 1
+    if use_multi_gpu:
+        print(f"\nUsing {num_gpus} GPUs for training")
+        device_strong = torch.device("cuda:0")
+        device_weak = torch.device("cuda:1")
+    else:
+        device_strong = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device_weak = device_strong
+
     output_dir = os.path.join(args.result_save_path, 'checkpoint')
     os.makedirs(output_dir, exist_ok=True)
 
-    # Stage 1: Initialize models
-    print("\n[Stage 1] Initializing Weak & Strong Models...")
+    # Stage 1: Initialize strong model with LoRA (M1 - trainable) on GPU 0
+    print("\n[Stage 1] Initializing Strong Model with LoRA...")
 
-    base_model = AutoModelForCausalLM.from_pretrained(
-        args.model_name_or_path,
-        dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2",
-    )
-
-    # Create weak model (M0 - frozen copy)
-    model_weak = AutoModelForCausalLM.from_pretrained(
-        args.model_name_or_path,
-        dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2",
-    )
-    for param in model_weak.parameters():
-        param.requires_grad = False
-    model_weak.eval()
-
-    # Create strong model with LoRA (M1 - trainable)
     model_strong = AutoModelForCausalLM.from_pretrained(
         args.model_name_or_path,
         dtype=torch.bfloat16,
@@ -226,15 +243,37 @@ def finetune_llm_wmss(args, all_queries, tokenizer):
 
     if tokenizer.pad_token_id is not None:
         model_strong.config.pad_token_id = tokenizer.pad_token_id
-        model_weak.config.pad_token_id = tokenizer.pad_token_id
     if hasattr(model_strong.config, 'use_cache'):
         model_strong.config.use_cache = False
     if hasattr(model_strong, 'gradient_checkpointing_enable'):
         model_strong.gradient_checkpointing_enable()
 
+    model_strong.to(device_strong)
+
+    # Stage 2: Initialize weak model on GPU 1
+    print("\n[Stage 1b] Initializing Weak Model on GPU 1...")
+    model_weak = AutoModelForCausalLM.from_pretrained(
+        args.model_name_or_path,
+        dtype=torch.bfloat16,
+        attn_implementation="flash_attention_2",
+    )
+    if tokenizer.pad_token_id is not None:
+        model_weak.config.pad_token_id = tokenizer.pad_token_id
+    for param in model_weak.parameters():
+        param.requires_grad = False
+    model_weak.eval()
+    model_weak.to(device_weak)
+
     # Build training dataset
     train_dataset = _build_wmss_dataset(all_queries, tokenizer, args.max_seq_length)
     print(f"\nTraining dataset size: {len(train_dataset)}")
+
+    # Prepare eval loader (used for entropy computation)
+    eval_subset = torch.utils.data.Subset(
+        train_dataset,
+        indices=list(range(min(1000, len(train_dataset))))
+    )
+    eval_loader = DataLoader(eval_subset, batch_size=args.llm_train_batch_size, shuffle=False)
 
     # WMSS iterations
     num_iterations = args.wmss_iterations
@@ -245,18 +284,18 @@ def finetune_llm_wmss(args, all_queries, tokenizer):
         print(f"WMSS Iteration {iteration + 1}/{num_iterations}")
         print(f"{'='*40}")
 
-        # === Stage 2: Curriculum Data Activation ===
+        # === Stage 2: Curriculum Data Activation (parallel on two GPUs) ===
         print("\n[Stage 2] Computing entropy dynamics...")
-        # Use a subset for entropy computation if dataset is large
-        eval_subset = torch.utils.data.Subset(
-            train_dataset,
-            indices=list(range(min(1000, len(train_dataset))))
-        )
-        eval_loader = DataLoader(eval_subset, batch_size=args.llm_train_batch_size, shuffle=False)
 
-        entropy_weak, entropy_strong, delta_H = compute_entropy_dynamics(
-            model_weak, model_strong, eval_loader, args.device
-        )
+        # Compute entropy for weak model on GPU 1
+        print("  Computing weak model entropy on GPU 1...")
+        entropy_weak = compute_entropy_sequential(model_weak, eval_loader, device_weak, "weak")
+
+        # Compute entropy for strong model on GPU 0
+        print("  Computing strong model entropy on GPU 0...")
+        entropy_strong = compute_entropy_sequential(model_strong, eval_loader, device_strong, "strong")
+
+        delta_H = entropy_strong - entropy_weak
 
         # Compute curriculum weights
         p_i = compute_curriculum_weights(
@@ -276,26 +315,11 @@ def finetune_llm_wmss(args, all_queries, tokenizer):
         print("\n[Stage 3] Joint training via logit mixing...")
         model_strong = wmss_train(model_strong, model_weak, active_dataset, tokenizer, args)
 
-        # Update weak reference for next iteration
+        # Update weak reference for next iteration by copying strong model weights
         print("\nUpdating weak reference...")
-        model_weak = AutoModelForCausalLM.from_pretrained(
-            args.model_name_or_path,
-            dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2",
-        )
-        # Copy strong model weights to weak model
         with torch.no_grad():
             for weak_param, strong_param in zip(model_weak.parameters(), model_strong.parameters()):
-                if not strong_param.requires_grad:  # Only copy non-Lora params
-                    continue
-                # Copy LoRA weights
-                if hasattr(strong_param, 'lora_alpha') or 'lora_' in strong_param.name.lower():
-                    continue
-        # For simplicity, we keep M_weak as the original base model
-        # In practice, you might want to copy the strong model
-        for param in model_weak.parameters():
-            param.requires_grad = False
-        model_weak.eval()
+                weak_param.copy_(strong_param)
         print(f"Weak reference updated (λ={args.wmss_lambda})")
 
     # Save final model
@@ -546,6 +570,7 @@ def finetune_llm(args, train_features, continue_training = False, previous_outpu
         print(f"Number of tokens: {example_enc['attention_mask'].sum().item()}")
     print("=" * 40)
 
+    total_steps = (len(train_features) // (int(args.llm_train_batch_size) * int(args.llm_gradient_accumulation_steps))) * int(args.num_train_epochs)
     training_args = TrainingArguments(
         output_dir=output_dir,
         num_train_epochs=float(args.num_train_epochs),
@@ -560,10 +585,9 @@ def finetune_llm(args, train_features, continue_training = False, previous_outpu
         gradient_checkpointing=True,
         optim='adamw_8bit',
         lr_scheduler_type='cosine',
-        warmup_ratio=0.1,
-        group_by_length=True,
-        length_column_name='length',
-    )
+        warmup_steps = total_steps * 0.1,
+        )
+
 
     def _sft_data_collator(features):
         batch = tokenizer.pad(
@@ -605,9 +629,6 @@ if __name__ == "__main__":
     args.n_gpu = torch.cuda.device_count()
     args.device = device
     set_seed(args)
-    args.use_direction = args.use_direction.lower() == 'true'
-    args.use_augmented_training = args.use_augmented_training.lower() == 'true'
-    args.use_extra_training_datasets = args.use_extra_training_datasets.lower() == 'true'
     if args.use_extra_training_datasets:
         args.num_train_epochs = 1.0
     
@@ -620,7 +641,7 @@ if __name__ == "__main__":
         print(f"  lambda={args.wmss_lambda}, alpha={args.wmss_alpha}, beta={args.wmss_beta}, gamma={args.wmss_gamma}")
         print(f"  iterations={args.wmss_iterations}")
 
-    args.prepro_tokenizer = AutoTokenizer.from_pretrained('base_models/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext')
+    args.prepro_tokenizer = AutoTokenizer.from_pretrained('../base_models/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext')
     temp_path = os.path.join(os.path.join(args.result_save_path, "checkpoint"))
     if not os.path.exists(temp_path):
         os.makedirs(temp_path)

@@ -421,7 +421,6 @@ def construct_llm_input(args, feature, labels = None, generate_data = False, pre
     rel_list = feature['rel_list'][0]
     rel_list_str = '\n'.join(rel_list)
     extract_prompt = args.extract_prompt
-    max_input_len = args.max_input_len
     use_direction = args.use_direction
 
     if shuffle:
@@ -474,9 +473,6 @@ def construct_llm_input(args, feature, labels = None, generate_data = False, pre
         llm_input = llm_input.replace('[Questions]', questions)
         
         input_len = len(llm_input)
-        if input_len > max_input_len:
-            max_input_len = input_len
-            args.max_input_len = input_len
             
         if previous_outputs is not None and labels is not None:
             output_str = previous_outputs[i]
@@ -490,9 +486,6 @@ def construct_llm_input(args, feature, labels = None, generate_data = False, pre
             llm_input = llm_input.replace('[Questions]', questions)
             
             input_len = len(llm_input)
-            if input_len > max_input_len:
-                max_input_len = input_len
-                args.max_input_len = input_len
                 
             query = {'instruction': '', 'input': llm_input, 'output': output_str if labels is not None else ''}
             queries.append(query)

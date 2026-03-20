@@ -31,7 +31,7 @@ def parse_arguments():
     parser.add_argument("--load_path", default="", type=str)
 
     parser.add_argument("--max_seq_length", default=3072, type=int)
-    parser.add_argument("--use_direction", default="false", type=str)    
+    parser.add_argument("--use_direction", action="store_true")    
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
 
@@ -403,8 +403,6 @@ if __name__ == "__main__":
     args.device = device
     args.prepro_tokenizer = AutoTokenizer.from_pretrained('base_models/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext')
     args.dataset = 'biored'
-    args.use_direction = args.use_direction.lower() == 'true'
-
     f = open(f'./meta/reflect/extract_api.txt', 'r', encoding='utf-8')
     args.extract_prompt = f.read()
     f.close()

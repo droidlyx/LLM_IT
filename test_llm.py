@@ -39,7 +39,7 @@ def parse_arguments():
     parser.add_argument("--vote_threshold", default=2, type=int)
     parser.add_argument("--num_examples", default=10, type=int)
 
-    parser.add_argument("--use_direction", default="false", type=str)       
+    parser.add_argument("--use_direction", action="store_true")       
     parser.add_argument("--seed", type=int, default=66,
                         help="random seed for initialization")
     parser.add_argument("--phase", type=int, default=1,
@@ -321,9 +321,8 @@ if __name__ == "__main__":
     args.n_gpu = torch.cuda.device_count()
     args.device = device
     set_seed(args)
-    args.use_direction = args.use_direction.lower() == 'true'
     args.load_dir = os.path.join(args.result_save_path, 'checkpoint')
-    args.prepro_tokenizer = AutoTokenizer.from_pretrained('base_models/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext')
+    args.prepro_tokenizer = AutoTokenizer.from_pretrained('../base_models/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext')
     args.max_input_len = 0
     if "docred" in args.data_dir:
         args.dataset = 'docred'
