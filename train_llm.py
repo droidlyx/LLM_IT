@@ -134,6 +134,9 @@ def wmss_train(model_strong, model_weak, train_dataset, tokenizer, args):
     learning_rate = args.llm_learning_rate
     max_seq_len = args.max_seq_length
 
+    # Match total epochs: num_train_epochs across all WMSS iterations
+    epochs_per_iteration = args.num_train_epochs / args.wmss_iterations
+
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model_strong.parameters()),
         lr=learning_rate,
@@ -142,27 +145,37 @@ def wmss_train(model_strong, model_weak, train_dataset, tokenizer, args):
 
     dataloader = DataLoader(train_dataset, batch_size=args.llm_train_batch_size, shuffle=True)
 
-    for batch in tqdm(dataloader, desc="WMSS Training"):
-        input_ids = batch['input_ids'].to(args.device)
-        attention_mask = batch['attention_mask'].to(args.device)
-        labels = batch['labels'].to(args.device)
+    for epoch in range(int(epochs_per_iteration)):
+        # Handle fractional epoch for last iteration
+        if epoch == int(epochs_per_iteration) and epochs_per_iteration % 1 != 0:
+            max_batches = int(len(dataloader) * (epochs_per_iteration % 1))
+        else:
+            max_batches = len(dataloader)
 
-        # Forward pass - weak model FROZEN
-        with torch.no_grad():
-            z_weak = model_weak(input_ids, attention_mask=attention_mask).logits
+        for batch_idx, batch in enumerate(tqdm(dataloader, desc=f"WMSS Epoch {epoch+1}")):
+            if batch_idx >= max_batches:
+                break
 
-        z_strong = model_strong(input_ids, attention_mask=attention_mask).logits
+            input_ids = batch['input_ids'].to(args.device)
+            attention_mask = batch['attention_mask'].to(args.device)
+            labels = batch['labels'].to(args.device)
 
-        # Mix logits in logit space
-        z_mix = lambda_param * z_strong + (1 - lambda_param) * z_weak
+            # Forward pass - weak model FROZEN
+            with torch.no_grad():
+                z_weak = model_weak(input_ids, attention_mask=attention_mask).logits
 
-        # Compute loss on MIXED logits
-        loss = F.cross_entropy(z_mix.view(-1, z_mix.size(-1)), labels.view(-1), ignore_index=-100)
+            z_strong = model_strong(input_ids, attention_mask=attention_mask).logits
 
-        # Backward pass - only M_strong gets updated
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            # Mix logits in logit space
+            z_mix = lambda_param * z_strong + (1 - lambda_param) * z_weak
+
+            # Compute loss on MIXED logits
+            loss = F.cross_entropy(z_mix.view(-1, z_mix.size(-1)), labels.view(-1), ignore_index=-100)
+
+            # Backward pass - only M_strong gets updated
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
     return model_strong
 
