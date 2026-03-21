@@ -100,7 +100,8 @@ def compute_entropy_sequential(model, dataloader, device, desc="Computing entrop
             H = compute_entropy(logits)
             # Compute mean entropy per sample (sequences have variable lengths)
             H_mean = H.mean(dim=-1)
-            entropy_list.append(H_mean.cpu())
+            # Keep on GPU for distributed operations (all_gather requires GPU tensors)
+            entropy_list.append(H_mean)
 
     return torch.cat(entropy_list, dim=0)
 
@@ -231,11 +232,21 @@ def wmss_train(model, train_dataset, tokenizer, args, device):
     lambda_param = args.wmss_lambda
     learning_rate = args.llm_learning_rate
 
-    # Match total epochs: num_train_epochs across all WMSS iterations
+    # Calculate training steps for this iteration
+    # Strategy: Always iterate full dataset, but limit total steps to match target epochs
     epochs_per_iteration = args.num_train_epochs / args.wmss_iterations
-
+    
+    # Debug: Check trainable parameters
+    trainable_params = [p for p in base_model.parameters() if p.requires_grad]
+    total_params = sum(p.numel() for p in trainable_params)
+    if is_main:
+        print(f"  Trainable parameter tensors: {len(trainable_params)}")
+        print(f"  Total trainable parameters: {total_params:,}")
+        if len(trainable_params) == 0:
+            print("  WARNING: No trainable parameters found!")
+    
     optimizer = torch.optim.AdamW(
-        filter(lambda p: p.requires_grad, base_model.parameters()),
+        trainable_params,
         lr=learning_rate,
         weight_decay=0.01,
     )
@@ -263,19 +274,31 @@ def wmss_train(model, train_dataset, tokenizer, args, device):
         dataloader = DataLoader(train_dataset, batch_size=args.llm_train_batch_size, sampler=sampler, collate_fn=_wmss_collate_fn)
     else:
         dataloader = DataLoader(train_dataset, batch_size=args.llm_train_batch_size, shuffle=True, collate_fn=_wmss_collate_fn)
+    
+    # Calculate total steps to match target epochs
+    # Note: active_dataset is already curriculum-sampled, and dataloader shuffles each epoch
+    total_steps = int(len(dataloader) * epochs_per_iteration)
+    if is_main:
+        print(f"  Training for {epochs_per_iteration:.2f} epochs ({total_steps} steps, {len(dataloader)} batches/epoch)")
+        print(f"  Active dataset: {len(train_dataset)} samples, {len(dataloader)} batches")
+    
     torch.cuda.set_device(device)
 
-    for epoch in range(int(epochs_per_iteration)):
+    total_loss = 0.0
+    num_batches = 0
+    step = 0
+    
+    # Train for target number of steps
+    # Since dataloader has shuffle=True, each iteration sees random batches
+    # This ensures good coverage even when training < 1 epoch
+    pbar = tqdm(total=total_steps, desc=f"WMSS Training", disable=not is_main)
+    while step < total_steps:
+        # Reshuffle for each pass through the data
         if is_distributed:
-            sampler.set_epoch(epoch)
-        # Handle fractional epoch for last iteration
-        if epoch == int(epochs_per_iteration) and epochs_per_iteration % 1 != 0:
-            max_batches = int(len(dataloader) * (epochs_per_iteration % 1))
-        else:
-            max_batches = len(dataloader)
-
-        for batch_idx, batch in enumerate(tqdm(dataloader, desc=f"WMSS Epoch {epoch+1}", disable=not is_main)):
-            if batch_idx >= max_batches:
+            sampler.set_epoch(step // len(dataloader))
+        
+        for batch_idx, batch in enumerate(dataloader):
+            if step >= total_steps:
                 break
 
             input_ids = batch['input_ids'].to(device)
@@ -283,17 +306,26 @@ def wmss_train(model, train_dataset, tokenizer, args, device):
             labels = batch['labels'].to(device)
 
             # Forward pass - weak model FROZEN (adapter disabled = base/merged weights)
-            with torch.no_grad():
-                with base_model.disable_adapter():
-                    z_weak = model(input_ids, attention_mask=attention_mask).logits
+            # Use detach() to prevent gradients from flowing back to weak model
+            with base_model.disable_adapter():
+                z_weak = model(input_ids, attention_mask=attention_mask).logits.detach()
 
-            # Forward pass - strong model (adapter enabled)
+            # Forward pass - strong model (adapter enabled automatically after context exit)
+            # Model is already in train mode
             z_strong = model(input_ids, attention_mask=attention_mask).logits
 
+            # Debug: Check if z_strong has gradients
+            if step == 0 and is_main:
+                print(f"  z_strong requires_grad: {z_strong.requires_grad}")
+                print(f"  z_weak requires_grad: {z_weak.requires_grad}")
+
             # Mix logits in logit space
+            # z_strong has gradients, z_weak is detached (no gradients)
+            # z_mix will have gradients flowing through z_strong component
             z_mix = lambda_param * z_strong + (1 - lambda_param) * z_weak
 
             # Compute loss on MIXED logits
+            # Gradients will flow back through z_strong (LoRA parameters)
             loss = F.cross_entropy(z_mix.view(-1, z_mix.size(-1)), labels.view(-1), ignore_index=-100)
 
             # Backward pass - DDP syncs gradients automatically across GPUs
@@ -301,8 +333,43 @@ def wmss_train(model, train_dataset, tokenizer, args, device):
             loss.backward()
             optimizer.step()
 
+            total_loss += loss.item()
+            num_batches += 1
+            step += 1
+            pbar.update(1)
+
+            # Log every 10 steps
+            if is_main and step % 10 == 0:
+                avg_loss = total_loss / num_batches
+                pbar.set_postfix({'loss': f'{loss.item():.4f}', 'avg_loss': f'{avg_loss:.4f}'})
+            
+            # Debug: Check for zero loss issue
+            if is_main and step <= 3:
+                # Check label statistics
+                valid_labels = labels[labels != -100]
+                num_valid = valid_labels.numel()
+                
+                # Check prediction accuracy
+                preds = z_mix.argmax(dim=-1).view(-1)
+                valid_preds = preds[labels.view(-1) != -100]
+                accuracy = (valid_preds == valid_labels).float().mean().item() if num_valid > 0 else 0.0
+                
+                # Check logits range
+                logit_max = z_mix.max().item()
+                logit_min = z_mix.min().item()
+                
+                print(f"  Step {step}: loss={loss.item():.6f}, acc={accuracy:.4f}, "
+                      f"valid_tokens={num_valid}, logit_range=[{logit_min:.2f}, {logit_max:.2f}], "
+                      f"z_strong.grad={z_strong.requires_grad}, z_mix.grad={z_mix.requires_grad}")
+
             del z_weak, z_strong, z_mix
             torch.cuda.empty_cache()
+    
+    pbar.close()
+    
+    if is_main and num_batches > 0:
+        avg_loss = total_loss / num_batches
+        print(f"  Training completed. {step} steps, Average loss: {avg_loss:.4f}")
 
     return model
 
@@ -366,6 +433,9 @@ def finetune_llm_wmss(args, all_queries, tokenizer):
         model.config.pad_token_id = tokenizer.pad_token_id
     if hasattr(model.config, 'use_cache'):
         model.config.use_cache = False
+    # Enable gradient checkpointing for memory efficiency (needed to avoid OOM with 2x forward pass)
+    # enable_input_require_grads() is the PEFT fix to ensure gradient checkpointing works with LoRA
+    model.enable_input_require_grads()
     if hasattr(model, 'gradient_checkpointing_enable'):
         model.gradient_checkpointing_enable()
 
@@ -387,11 +457,9 @@ def finetune_llm_wmss(args, all_queries, tokenizer):
     if is_main:
         print(f"\nTraining dataset size: {len(train_dataset)}")
 
-    # Prepare eval loader (same data on all ranks → consistent curriculum weights)
-    eval_subset = torch.utils.data.Subset(
-        train_dataset,
-        indices=list(range(min(1000, len(train_dataset))))
-    )
+    # Use full training dataset for entropy computation to avoid overfitting to small subset
+    # Each WMSS iteration will compute entropy on all data and sample based on curriculum weights
+    eval_subset = train_dataset
     def _wmss_collate_fn(batch):
         """Collate function to handle variable-length sequences with padding."""
         max_len = max(b['input_ids'].size(0) for b in batch)
@@ -409,7 +477,14 @@ def finetune_llm_wmss(args, all_queries, tokenizer):
             'labels': torch.stack(labels),
         }
 
-    eval_loader = DataLoader(eval_subset, batch_size=args.llm_train_batch_size, shuffle=False, collate_fn=_wmss_collate_fn)
+    # Use DistributedSampler for parallel entropy computation across GPUs
+    if is_distributed:
+        eval_sampler = torch.utils.data.distributed.DistributedSampler(
+            eval_subset, shuffle=False, drop_last=False
+        )
+        eval_loader = DataLoader(eval_subset, batch_size=args.llm_train_batch_size, sampler=eval_sampler, collate_fn=_wmss_collate_fn)
+    else:
+        eval_loader = DataLoader(eval_subset, batch_size=args.llm_train_batch_size, shuffle=False, collate_fn=_wmss_collate_fn)
 
     # WMSS iterations
     num_iterations = args.wmss_iterations
@@ -427,15 +502,36 @@ def finetune_llm_wmss(args, all_queries, tokenizer):
             print("\n[Stage 2] Computing entropy dynamics...")
         model.eval()
 
-        # Compute entropy (all ranks get same result — same model, same data)
+        # Parallel entropy computation: each GPU processes different data shard
+        # Then gather results from all ranks
         if is_main:
-            print("  Computing weak model entropy (adapter disabled)...")
+            print("  Computing weak model entropy (adapter disabled) - parallel across GPUs...")
         with base_model.disable_adapter():
-            entropy_weak = compute_entropy_sequential(model, eval_loader, device, "weak", show_progress=is_main)
+            local_entropy_weak = compute_entropy_sequential(model, eval_loader, device, "weak", show_progress=is_main)
 
         if is_main:
-            print("  Computing strong model entropy (adapter enabled)...")
-        entropy_strong = compute_entropy_sequential(model, eval_loader, device, "strong", show_progress=is_main)
+            print("  Computing strong model entropy (adapter enabled) - parallel across GPUs...")
+        local_entropy_strong = compute_entropy_sequential(model, eval_loader, device, "strong", show_progress=is_main)
+
+        # Gather entropy from all ranks and concatenate in correct order
+        if is_distributed:
+            # Gather all local entropy tensors from all ranks
+            world_size = torch.distributed.get_world_size()
+            
+            # Prepare lists to hold gathered tensors
+            gathered_weak = [torch.zeros_like(local_entropy_weak) for _ in range(world_size)]
+            gathered_strong = [torch.zeros_like(local_entropy_strong) for _ in range(world_size)]
+            
+            # All-gather operation
+            torch.distributed.all_gather(gathered_weak, local_entropy_weak)
+            torch.distributed.all_gather(gathered_strong, local_entropy_strong)
+            
+            # Concatenate in order (each rank processed different shards)
+            entropy_weak = torch.cat(gathered_weak, dim=0)[:len(eval_subset)]
+            entropy_strong = torch.cat(gathered_strong, dim=0)[:len(eval_subset)]
+        else:
+            entropy_weak = local_entropy_weak
+            entropy_strong = local_entropy_strong
 
         delta_H = entropy_strong - entropy_weak
 
@@ -459,11 +555,22 @@ def finetune_llm_wmss(args, all_queries, tokenizer):
             print("\n[Stage 3] Joint training via logit mixing...")
         model = wmss_train(model, active_dataset, tokenizer, args, device)
 
+        # Save adapter checkpoint for this iteration (only rank 0)
+        iter_checkpoint_dir = os.path.join(output_dir, f'iteration_{iteration + 1}')
+        if is_main:
+            print(f"\nSaving iteration {iteration + 1} adapter checkpoint...")
+            os.makedirs(iter_checkpoint_dir, exist_ok=True)
+            save_model = model.module if is_distributed else model
+            save_model.save_pretrained(iter_checkpoint_dir)
+            print(f"Adapter saved to {iter_checkpoint_dir}")
+        if is_distributed:
+            torch.distributed.barrier()
+
         # Update weak reference: merge LoRA into base weights so that
         # disable_adapter() in the next iteration returns the current strong
         if iteration < num_iterations - 1:
             if is_main:
-                print("\nUpdating weak reference (merging LoRA into base)...")
+                print("Updating weak reference (merging LoRA into base)...")
             # Unwrap DDP
             if is_distributed:
                 model = model.module
@@ -472,6 +579,8 @@ def finetune_llm_wmss(args, all_queries, tokenizer):
             model = get_peft_model(model, lora_cfg)
             if hasattr(model.config, 'use_cache'):
                 model.config.use_cache = False
+            # Critical: enable_input_require_grads() needed for gradient checkpointing
+            model.enable_input_require_grads()
             if hasattr(model, 'gradient_checkpointing_enable'):
                 model.gradient_checkpointing_enable()
             # Re-wrap with DDP
@@ -486,13 +595,21 @@ def finetune_llm_wmss(args, all_queries, tokenizer):
             if is_main:
                 print(f"Weak reference updated (λ={args.wmss_lambda})")
 
-    # Save final model (only rank 0)
+    # Training complete - adapters saved for each iteration
     if is_main:
-        print("\nSaving final model...")
-        save_model = model.module if is_distributed else model
-        save_model.save_pretrained(output_dir)
+        print("\n" + "="*50)
+        print("WMSS Training Complete")
+        print("="*50)
         tokenizer.save_pretrained(output_dir)
-        print(f"Model saved to {output_dir}")
+        print(f"\nAdapter checkpoints saved:")
+        for iter_idx in range(num_iterations):
+            print(f"  - {output_dir}/iteration_{iter_idx + 1}/")
+        print(f"\nTo use the trained model, load adapters sequentially in test_llm.py:")
+        print(f"  1. Load base model: {args.model_name_or_path}")
+        print(f"  2. Load iteration_1 adapter and merge")
+        print(f"  3. Load iteration_2 adapter and merge")
+        print(f"  4. Load iteration_3 adapter and merge")
+    
     if is_distributed:
         torch.distributed.barrier()
 
