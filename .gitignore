@@ -3,3 +3,4 @@
 *.pyc
 base_models/
 dataset/
+results/
