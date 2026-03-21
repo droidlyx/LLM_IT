@@ -57,6 +57,8 @@ def parse_arguments():
                         help="random seed for initialization")
     parser.add_argument("--phase", type=int, default=1,
                         help="for multi-step training/testing")
+    parser.add_argument("--local_rank", type=int, default=-1,
+                        help="For distributed training: local_rank (set automatically by torchrun)")
     return parser.parse_args()
 
 def _build_chat_or_text_prompt(prompt_obj, tokenizer):
@@ -83,20 +85,22 @@ def compute_entropy(logits):
     return -torch.sum(probs * torch.log(probs + 1e-10), dim=-1)
 
 
-def compute_entropy_sequential(model, dataloader, device, desc="Computing entropy"):
+def compute_entropy_sequential(model, dataloader, device, desc="Computing entropy", show_progress=True):
     """Compute entropy for a single model."""
     model.eval()
     entropy_list = []
 
     with torch.no_grad():
-        for batch in tqdm(dataloader, desc=desc):
+        for batch in tqdm(dataloader, desc=desc, disable=not show_progress):
+            torch.cuda.set_device(device)
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
 
             logits = model(input_ids, attention_mask=attention_mask).logits
             H = compute_entropy(logits)
-
-            entropy_list.append(H.cpu())
+            # Compute mean entropy per sample (sequences have variable lengths)
+            H_mean = H.mean(dim=-1)
+            entropy_list.append(H_mean.cpu())
 
     return torch.cat(entropy_list, dim=0)
 
@@ -105,6 +109,7 @@ def compute_entropy_dynamics(model_weak, model_strong, dataloader, device):
     """Compute entropy dynamics (ΔH = H_strong - H_weak) for each sample."""
     model_weak.eval()
     model_strong.eval()
+    torch.cuda.set_device(device)
 
     entropy_weak_list = []
     entropy_strong_list = []
@@ -143,49 +148,147 @@ def compute_curriculum_weights(entropy_weak, delta_H, alpha=0.1, beta=0.8, gamma
     return weights
 
 
-def wmss_train(model_strong, model_weak, train_dataset, tokenizer, args):
-    """WMSS joint training via logit mixing with multi-GPU support."""
-    model_weak.eval()
-    model_strong.train()
+def find_optimal_batch_size(model, sample_batch, device, initial_batch_size=1, max_batch_size=32, target_memory_util=0.8):
+    """Find optimal batch size via memory probing with binary search.
+
+    Args:
+        model: The model to test with
+        sample_batch: A sample batch dict with 'input_ids', 'attention_mask'
+        device: CUDA device
+        initial_batch_size: Starting batch size to try
+        max_batch_size: Maximum batch size to consider
+        target_memory_util: Target memory utilization (0.8 = 80%)
+
+    Returns:
+        Optimal batch size that fits in GPU memory
+    """
+    torch.cuda.empty_cache()
+
+    def test_batch(batch_size):
+        torch.cuda.empty_cache()
+        try:
+            # Handle batch dimension
+            input_ids = sample_batch['input_ids']
+            attention_mask = sample_batch['attention_mask']
+
+            if input_ids.dim() == 1:
+                input_ids = input_ids.unsqueeze(0)
+                attention_mask = attention_mask.unsqueeze(0)
+
+            input_ids = input_ids.to(device)
+            attention_mask = attention_mask.to(device)
+
+            with torch.no_grad():
+                _ = model(input_ids, attention_mask=attention_mask)
+            torch.cuda.empty_cache()
+            return True
+        except RuntimeError as e:
+            if "out of memory" in str(e).lower():
+                torch.cuda.empty_cache()
+                return False
+            raise
+
+    # Binary search for max feasible batch size
+    low, high = 0, max_batch_size
+    while low < high:
+        mid = (low + high + 1) // 2
+        if test_batch(mid):
+            low = mid
+        else:
+            high = mid - 1
+
+    # Get memory stats at optimal level
+    torch.cuda.reset_peak_memory_stats(device)
+    test_batch(low if low > 0 else 1)
+    peak_memory = torch.cuda.max_memory_allocated(device) / 1024**3  # GB
+    total_memory = torch.cuda.get_device_properties(device).total_memory / 1024**3
+
+    # Try to use more memory if headroom exists
+    if total_memory > 0 and low > 0:
+        utilization = peak_memory / total_memory if peak_memory > 0 else 0
+        if utilization < target_memory_util and low < max_batch_size:
+            scale_factor = (target_memory_util * total_memory) / peak_memory if peak_memory > 0 else 1
+            new_batch_size = min(max_batch_size, int(low * scale_factor))
+            if test_batch(new_batch_size):
+                return new_batch_size
+
+    return low if low > 0 else initial_batch_size
+
+
+def wmss_train(model, train_dataset, tokenizer, args, device):
+    """WMSS joint training via logit mixing using single model with adapter toggling.
+
+    Uses model.disable_adapter() for weak-model inference, avoiding the need
+    for a second full-size model and preventing GPU OOM on 24 GB cards.
+    Supports DDP for true multi-GPU parallel training.
+    """
+    # Get base model for adapter operations (unwrap DDP if needed)
+    base_model = model.module if hasattr(model, 'module') else model
+    is_distributed = isinstance(model, torch.nn.parallel.DistributedDataParallel)
+    is_main = not is_distributed or torch.distributed.get_rank() == 0
+    model.train()
 
     lambda_param = args.wmss_lambda
     learning_rate = args.llm_learning_rate
-    max_seq_len = args.max_seq_length
 
     # Match total epochs: num_train_epochs across all WMSS iterations
     epochs_per_iteration = args.num_train_epochs / args.wmss_iterations
 
     optimizer = torch.optim.AdamW(
-        filter(lambda p: p.requires_grad, model_strong.parameters()),
+        filter(lambda p: p.requires_grad, base_model.parameters()),
         lr=learning_rate,
         weight_decay=0.01,
     )
 
-    dataloader = DataLoader(train_dataset, batch_size=args.llm_train_batch_size, shuffle=True)
+    def _wmss_collate_fn(batch):
+        """Collate function to handle variable-length sequences with padding."""
+        max_len = max(b['input_ids'].size(0) for b in batch)
+        input_ids = []
+        attention_masks = []
+        labels = []
+        for b in batch:
+            pad_len = max_len - b['input_ids'].size(0)
+            input_ids.append(torch.nn.functional.pad(b['input_ids'], (0, pad_len), value=0))
+            attention_masks.append(torch.nn.functional.pad(b['attention_mask'], (0, pad_len), value=0))
+            labels.append(torch.nn.functional.pad(b['labels'], (0, pad_len), value=-100))
+        return {
+            'input_ids': torch.stack(input_ids),
+            'attention_mask': torch.stack(attention_masks),
+            'labels': torch.stack(labels),
+        }
 
-    device_strong = args.device  # e.g., cuda:0
-    device_weak = torch.device("cuda:1")  # model_weak on second GPU
+    # Use DistributedSampler for DDP - each GPU processes different data
+    if is_distributed:
+        sampler = torch.utils.data.distributed.DistributedSampler(train_dataset, shuffle=True)
+        dataloader = DataLoader(train_dataset, batch_size=args.llm_train_batch_size, sampler=sampler, collate_fn=_wmss_collate_fn)
+    else:
+        dataloader = DataLoader(train_dataset, batch_size=args.llm_train_batch_size, shuffle=True, collate_fn=_wmss_collate_fn)
+    torch.cuda.set_device(device)
 
     for epoch in range(int(epochs_per_iteration)):
+        if is_distributed:
+            sampler.set_epoch(epoch)
         # Handle fractional epoch for last iteration
         if epoch == int(epochs_per_iteration) and epochs_per_iteration % 1 != 0:
             max_batches = int(len(dataloader) * (epochs_per_iteration % 1))
         else:
             max_batches = len(dataloader)
 
-        for batch_idx, batch in enumerate(tqdm(dataloader, desc=f"WMSS Epoch {epoch+1}")):
+        for batch_idx, batch in enumerate(tqdm(dataloader, desc=f"WMSS Epoch {epoch+1}", disable=not is_main)):
             if batch_idx >= max_batches:
                 break
 
-            input_ids = batch['input_ids'].to(device_strong)
-            attention_mask = batch['attention_mask'].to(device_strong)
-            labels = batch['labels'].to(device_strong)
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].to(device)
 
-            # Forward pass - weak model FROZEN (on GPU 1)
+            # Forward pass - weak model FROZEN (adapter disabled = base/merged weights)
             with torch.no_grad():
-                z_weak = model_weak(input_ids.to(device_weak), attention_mask=attention_mask.to(device_weak)).logits.to(device_strong)
+                with base_model.disable_adapter():
+                    z_weak = model(input_ids, attention_mask=attention_mask).logits
 
-            z_strong = model_strong(input_ids, attention_mask=attention_mask).logits
+            # Forward pass - strong model (adapter enabled)
+            z_strong = model(input_ids, attention_mask=attention_mask).logits
 
             # Mix logits in logit space
             z_mix = lambda_param * z_strong + (1 - lambda_param) * z_weak
@@ -193,42 +296,59 @@ def wmss_train(model_strong, model_weak, train_dataset, tokenizer, args):
             # Compute loss on MIXED logits
             loss = F.cross_entropy(z_mix.view(-1, z_mix.size(-1)), labels.view(-1), ignore_index=-100)
 
-            # Backward pass - only M_strong gets updated
+            # Backward pass - DDP syncs gradients automatically across GPUs
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-    return model_strong
+            del z_weak, z_strong, z_mix
+            torch.cuda.empty_cache()
 
-    return model_strong
+    return model
 
 def finetune_llm_wmss(args, all_queries, tokenizer):
-    """Full WMSS training pipeline with curriculum data activation and logit mixing."""
-    print("=" * 50)
-    print("Starting WMSS (Weak-Driven Learning) Training")
-    print("=" * 50)
+    """Full WMSS training pipeline with curriculum data activation and logit mixing.
 
-    # Check for multiple GPUs
-    num_gpus = torch.cuda.device_count()
-    use_multi_gpu = num_gpus > 1
-    if use_multi_gpu:
-        print(f"\nUsing {num_gpus} GPUs for training")
-        device_strong = torch.device("cuda:0")
-        device_weak = torch.device("cuda:1")
+    Memory-efficient single-model approach: uses one model with LoRA adapter
+    toggling (disable_adapter) instead of loading two separate 8B models.
+    Adapter enabled = strong model, adapter disabled = weak reference.
+
+    Supports DDP multi-GPU training via torchrun for full GPU utilization.
+    Launch: torchrun --nproc_per_node=NUM_GPUS train_llm.py --use_wmss ...
+    """
+    is_distributed = args.local_rank != -1
+    if is_distributed:
+        device = torch.device(f"cuda:{args.local_rank}")
+        world_size = torch.distributed.get_world_size()
     else:
-        device_strong = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        device_weak = device_strong
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        world_size = 1
+    is_main = args.is_main_process
+
+    if is_main:
+        print("=" * 50)
+        print("Starting WMSS (Weak-Driven Learning) Training")
+        print("=" * 50)
+        if is_distributed:
+            print(f"\nUsing DDP with {world_size} GPUs — each GPU loads full model, processes different data")
+        else:
+            print(f"\nUsing single GPU: {device}")
 
     output_dir = os.path.join(args.result_save_path, 'checkpoint')
-    os.makedirs(output_dir, exist_ok=True)
+    if is_main:
+        os.makedirs(output_dir, exist_ok=True)
+    if is_distributed:
+        torch.distributed.barrier()
 
-    # Stage 1: Initialize strong model with LoRA (M1 - trainable) on GPU 0
-    print("\n[Stage 1] Initializing Strong Model with LoRA...")
-
-    model_strong = AutoModelForCausalLM.from_pretrained(
+    # Stage 1: Initialize single model with LoRA on local GPU
+    if is_main:
+        print("\n[Stage 1] Initializing Model with LoRA...")
+    model = AutoModelForCausalLM.from_pretrained(
         args.model_name_or_path,
         dtype=torch.bfloat16,
         attn_implementation="flash_attention_2",
+        device_map={"": device},
+        low_cpu_mem_usage=True,
     )
 
     lora_cfg = LoraConfig(
@@ -238,62 +358,84 @@ def finetune_llm_wmss(args, all_queries, tokenizer):
         bias='none',
         task_type='CAUSAL_LM',
     )
-    model_strong = get_peft_model(model_strong, lora_cfg)
-    model_strong.print_trainable_parameters()
+    model = get_peft_model(model, lora_cfg)
+    if is_main:
+        model.print_trainable_parameters()
 
     if tokenizer.pad_token_id is not None:
-        model_strong.config.pad_token_id = tokenizer.pad_token_id
-    if hasattr(model_strong.config, 'use_cache'):
-        model_strong.config.use_cache = False
-    if hasattr(model_strong, 'gradient_checkpointing_enable'):
-        model_strong.gradient_checkpointing_enable()
+        model.config.pad_token_id = tokenizer.pad_token_id
+    if hasattr(model.config, 'use_cache'):
+        model.config.use_cache = False
+    if hasattr(model, 'gradient_checkpointing_enable'):
+        model.gradient_checkpointing_enable()
 
-    model_strong.to(device_strong)
-
-    # Stage 2: Initialize weak model on GPU 1
-    print("\n[Stage 1b] Initializing Weak Model on GPU 1...")
-    model_weak = AutoModelForCausalLM.from_pretrained(
-        args.model_name_or_path,
-        dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2",
-    )
-    if tokenizer.pad_token_id is not None:
-        model_weak.config.pad_token_id = tokenizer.pad_token_id
-    for param in model_weak.parameters():
-        param.requires_grad = False
-    model_weak.eval()
-    model_weak.to(device_weak)
+    # Wrap with DDP for true multi-GPU parallel training
+    if is_distributed:
+        model = torch.nn.parallel.DistributedDataParallel(
+            model, device_ids=[args.local_rank],
+            output_device=args.local_rank,
+            find_unused_parameters=False,
+        )
+        base_model = model.module
+        if is_main:
+            print(f"Model wrapped with DDP across {world_size} GPUs")
+    else:
+        base_model = model
 
     # Build training dataset
     train_dataset = _build_wmss_dataset(all_queries, tokenizer, args.max_seq_length)
-    print(f"\nTraining dataset size: {len(train_dataset)}")
+    if is_main:
+        print(f"\nTraining dataset size: {len(train_dataset)}")
 
-    # Prepare eval loader (used for entropy computation)
+    # Prepare eval loader (same data on all ranks → consistent curriculum weights)
     eval_subset = torch.utils.data.Subset(
         train_dataset,
         indices=list(range(min(1000, len(train_dataset))))
     )
-    eval_loader = DataLoader(eval_subset, batch_size=args.llm_train_batch_size, shuffle=False)
+    def _wmss_collate_fn(batch):
+        """Collate function to handle variable-length sequences with padding."""
+        max_len = max(b['input_ids'].size(0) for b in batch)
+        input_ids = []
+        attention_masks = []
+        labels = []
+        for b in batch:
+            pad_len = max_len - b['input_ids'].size(0)
+            input_ids.append(torch.nn.functional.pad(b['input_ids'], (0, pad_len), value=0))
+            attention_masks.append(torch.nn.functional.pad(b['attention_mask'], (0, pad_len), value=0))
+            labels.append(torch.nn.functional.pad(b['labels'], (0, pad_len), value=-100))
+        return {
+            'input_ids': torch.stack(input_ids),
+            'attention_mask': torch.stack(attention_masks),
+            'labels': torch.stack(labels),
+        }
+
+    eval_loader = DataLoader(eval_subset, batch_size=args.llm_train_batch_size, shuffle=False, collate_fn=_wmss_collate_fn)
 
     # WMSS iterations
     num_iterations = args.wmss_iterations
-    print(f"\nRunning {num_iterations} WMSS iterations...")
+    if is_main:
+        print(f"\nRunning {num_iterations} WMSS iterations...")
 
     for iteration in range(num_iterations):
-        print(f"\n{'='*40}")
-        print(f"WMSS Iteration {iteration + 1}/{num_iterations}")
-        print(f"{'='*40}")
+        if is_main:
+            print(f"\n{'='*40}")
+            print(f"WMSS Iteration {iteration + 1}/{num_iterations}")
+            print(f"{'='*40}")
 
-        # === Stage 2: Curriculum Data Activation (parallel on two GPUs) ===
-        print("\n[Stage 2] Computing entropy dynamics...")
+        # === Stage 2: Curriculum Data Activation ===
+        if is_main:
+            print("\n[Stage 2] Computing entropy dynamics...")
+        model.eval()
 
-        # Compute entropy for weak model on GPU 1
-        print("  Computing weak model entropy on GPU 1...")
-        entropy_weak = compute_entropy_sequential(model_weak, eval_loader, device_weak, "weak")
+        # Compute entropy (all ranks get same result — same model, same data)
+        if is_main:
+            print("  Computing weak model entropy (adapter disabled)...")
+        with base_model.disable_adapter():
+            entropy_weak = compute_entropy_sequential(model, eval_loader, device, "weak", show_progress=is_main)
 
-        # Compute entropy for strong model on GPU 0
-        print("  Computing strong model entropy on GPU 0...")
-        entropy_strong = compute_entropy_sequential(model_strong, eval_loader, device_strong, "strong")
+        if is_main:
+            print("  Computing strong model entropy (adapter enabled)...")
+        entropy_strong = compute_entropy_sequential(model, eval_loader, device, "strong", show_progress=is_main)
 
         delta_H = entropy_strong - entropy_weak
 
@@ -309,26 +451,52 @@ def finetune_llm_wmss(args, all_queries, tokenizer):
         num_samples = min(len(train_dataset), 1000)
         sample_indices = torch.multinomial(p_i, num_samples, replacement=True)
         active_dataset = torch.utils.data.Subset(train_dataset, sample_indices)
-        print(f"Active dataset size: {len(active_dataset)}")
+        if is_main:
+            print(f"Active dataset size: {len(active_dataset)}")
 
         # === Stage 3: Joint Training via Logit Mixing ===
-        print("\n[Stage 3] Joint training via logit mixing...")
-        model_strong = wmss_train(model_strong, model_weak, active_dataset, tokenizer, args)
+        if is_main:
+            print("\n[Stage 3] Joint training via logit mixing...")
+        model = wmss_train(model, active_dataset, tokenizer, args, device)
 
-        # Update weak reference for next iteration by copying strong model weights
-        print("\nUpdating weak reference...")
-        with torch.no_grad():
-            for weak_param, strong_param in zip(model_weak.parameters(), model_strong.parameters()):
-                weak_param.copy_(strong_param)
-        print(f"Weak reference updated (λ={args.wmss_lambda})")
+        # Update weak reference: merge LoRA into base weights so that
+        # disable_adapter() in the next iteration returns the current strong
+        if iteration < num_iterations - 1:
+            if is_main:
+                print("\nUpdating weak reference (merging LoRA into base)...")
+            # Unwrap DDP
+            if is_distributed:
+                model = model.module
+            model = model.merge_and_unload()
+            torch.cuda.empty_cache()
+            model = get_peft_model(model, lora_cfg)
+            if hasattr(model.config, 'use_cache'):
+                model.config.use_cache = False
+            if hasattr(model, 'gradient_checkpointing_enable'):
+                model.gradient_checkpointing_enable()
+            # Re-wrap with DDP
+            if is_distributed:
+                model = torch.nn.parallel.DistributedDataParallel(
+                    model, device_ids=[args.local_rank],
+                    output_device=args.local_rank,
+                    find_unused_parameters=False,
+                )
+                base_model = model.module
+                torch.distributed.barrier()
+            if is_main:
+                print(f"Weak reference updated (λ={args.wmss_lambda})")
 
-    # Save final model
-    print("\nSaving final model...")
-    model_strong.save_pretrained(output_dir)
-    tokenizer.save_pretrained(output_dir)
-    print(f"Model saved to {output_dir}")
+    # Save final model (only rank 0)
+    if is_main:
+        print("\nSaving final model...")
+        save_model = model.module if is_distributed else model
+        save_model.save_pretrained(output_dir)
+        tokenizer.save_pretrained(output_dir)
+        print(f"Model saved to {output_dir}")
+    if is_distributed:
+        torch.distributed.barrier()
 
-    return model_strong
+    return model
 
 
 def _build_wmss_dataset(items, tokenizer, max_length):
@@ -389,6 +557,17 @@ def _build_wmss_dataset(items, tokenizer, max_length):
 
 
 def finetune_llm(args, train_features, continue_training = False, previous_outputs = None):
+    is_distributed = args.local_rank != -1
+    is_main = args.is_main_process
+
+    if is_main:
+        num_gpus = torch.cuda.device_count()
+        print(f"\n{'='*50}")
+        print(f"Detected {num_gpus} GPU(s) for training")
+        if is_distributed:
+            print(f"Using DDP with {torch.distributed.get_world_size()} processes — full parallel utilization")
+        print(f"{'='*50}")
+    
     dataloader = DataLoader(train_features, batch_size=1, shuffle=False, collate_fn=collate_fn, drop_last=False)
 
     batch_cnt = 0
@@ -435,12 +614,25 @@ def finetune_llm(args, train_features, continue_training = False, previous_outpu
     print(test_cnt)
 
     output_dir = os.path.join(args.result_save_path, 'checkpoint')
-    os.makedirs(output_dir, exist_ok=True)
+    if is_main:
+        os.makedirs(output_dir, exist_ok=True)
+    if is_distributed:
+        torch.distributed.barrier()
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=True)
     if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
         tokenizer.pad_token = tokenizer.eos_token
 
+    # With DDP, Trainer gives each GPU per_device_train_batch_size samples.
+    # No manual batch size multiplication needed.
+    per_device_bs = int(args.llm_train_batch_size)
+    if is_main:
+        world = torch.distributed.get_world_size() if is_distributed else 1
+        print(f"\nBatch config: per_device={per_device_bs}, GPUs={world}, "
+              f"grad_accum={int(args.llm_gradient_accumulation_steps)}, "
+              f"effective_global={per_device_bs * world * int(args.llm_gradient_accumulation_steps)}")
+
+    # No device_map — Trainer handles device placement & DDP wrapping
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name_or_path,
         dtype=torch.bfloat16,
@@ -544,37 +736,35 @@ def finetune_llm(args, train_features, continue_training = False, previous_outpu
     train_indices = list(range(len(train_dataset)))
     random.shuffle(train_indices)
     train_dataset = torch.utils.data.Subset(train_dataset, train_indices)
-    print(f"Training dataset shuffled. Total samples: {len(train_dataset)}")
+    if is_main:
+        print(f"Training dataset shuffled. Total samples: {len(train_dataset)}")
 
     # Output example training data for debugging
-    print("\n=== Training Data Examples ===")
-    if len(all_queries) > 0:
-        example_query = all_queries[0]
-        # Show the formatted prompt
-        example_prompt = _build_chat_or_text_prompt(example_query, tokenizer)
-        # Show the full text that goes to the model
-        full_text = (example_prompt + (example_query.get('output') or '')).strip()
-        print(f"\nFull model input: {full_text}...")
-        print(f"Expected output: {example_query.get('output', 'None')}")
-        
-        # Show tokenized version
-        example_enc = tokenizer(
-            full_text,
-            padding='max_length',
-            truncation=True,
-            max_length=args.max_seq_length,
-            return_tensors='pt',
-        )
-        print(f"\nTokenized input_ids shape: {example_enc['input_ids'].shape}")
-        print(f"Tokenized attention_mask shape: {example_enc['attention_mask'].shape}")
-        print(f"Number of tokens: {example_enc['attention_mask'].sum().item()}")
-    print("=" * 40)
+    if is_main:
+        print("\n=== Training Data Examples ===")
+        if len(all_queries) > 0:
+            example_query = all_queries[0]
+            example_prompt = _build_chat_or_text_prompt(example_query, tokenizer)
+            full_text = (example_prompt + (example_query.get('output') or '')).strip()
+            print(f"\nFull model input: {full_text}...")
+            print(f"Expected output: {example_query.get('output', 'None')}")
+            example_enc = tokenizer(
+                full_text,
+                padding='max_length',
+                truncation=True,
+                max_length=args.max_seq_length,
+                return_tensors='pt',
+            )
+            print(f"\nTokenized input_ids shape: {example_enc['input_ids'].shape}")
+            print(f"Tokenized attention_mask shape: {example_enc['attention_mask'].shape}")
+            print(f"Number of tokens: {example_enc['attention_mask'].sum().item()}")
+        print("=" * 40)
 
-    total_steps = (len(train_features) // (int(args.llm_train_batch_size) * int(args.llm_gradient_accumulation_steps))) * int(args.num_train_epochs)
+    total_steps = max(1, (len(train_features) // (per_device_bs * int(args.llm_gradient_accumulation_steps))) * int(args.num_train_epochs))
     training_args = TrainingArguments(
         output_dir=output_dir,
         num_train_epochs=float(args.num_train_epochs),
-        per_device_train_batch_size=int(args.llm_train_batch_size),
+        per_device_train_batch_size=per_device_bs,
         gradient_accumulation_steps=int(args.llm_gradient_accumulation_steps),
         learning_rate=float(args.llm_learning_rate),
         logging_steps=10,
@@ -585,7 +775,8 @@ def finetune_llm(args, train_features, continue_training = False, previous_outpu
         gradient_checkpointing=True,
         optim='adamw_8bit',
         lr_scheduler_type='cosine',
-        warmup_steps = total_steps * 0.1,
+        warmup_steps = max(1, int(total_steps * 0.1)),
+        ddp_find_unused_parameters=False,
         )
 
 
@@ -617,34 +808,58 @@ def finetune_llm(args, train_features, continue_training = False, previous_outpu
     )
 
     trainer.model_accepts_loss_kwargs = False
+    
+    if is_main:
+        if is_distributed:
+            print(f"\nStarting DDP training with {torch.distributed.get_world_size()} GPUs — full parallel utilization")
+        else:
+            print("\nStarting single-GPU training...")
+    
     trainer.train()
-    tokenizer.save_pretrained(output_dir)
+    if is_main:
+        tokenizer.save_pretrained(output_dir)
     trainer.save_model(output_dir)
 
 if __name__ == "__main__":
-    mp.set_start_method('spawn', force=True)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    # Initialize distributed training if launched with torchrun/accelerate
+    local_rank = int(os.environ.get("LOCAL_RANK", -1))
+    if local_rank != -1:
+        torch.distributed.init_process_group(backend="nccl")
+        torch.cuda.set_device(local_rank)
+        device = torch.device(f"cuda:{local_rank}")
+    else:
+        mp.set_start_method('spawn', force=True)
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
     args = parse_arguments()
+    args.local_rank = local_rank
     args.n_gpu = torch.cuda.device_count()
     args.device = device
+    args.is_main_process = (local_rank in [-1, 0])
     set_seed(args)
     if args.use_extra_training_datasets:
         args.num_train_epochs = 1.0
-    
-    print("use_direction: ", args.use_direction)
-    print("use_augmented_training: ", args.use_augmented_training)
-    print("use_extra_training_datasets: ", args.use_extra_training_datasets)
-    print("use_wmss: ", args.use_wmss)
-    if args.use_wmss:
-        print("WMSS Parameters:")
-        print(f"  lambda={args.wmss_lambda}, alpha={args.wmss_alpha}, beta={args.wmss_beta}, gamma={args.wmss_gamma}")
-        print(f"  iterations={args.wmss_iterations}")
+
+    if args.is_main_process:
+        print("use_direction: ", args.use_direction)
+        print("use_augmented_training: ", args.use_augmented_training)
+        print("use_extra_training_datasets: ", args.use_extra_training_datasets)
+        print("use_wmss: ", args.use_wmss)
+        if args.use_wmss:
+            print("WMSS Parameters:")
+            print(f"  lambda={args.wmss_lambda}, alpha={args.wmss_alpha}, beta={args.wmss_beta}, gamma={args.wmss_gamma}")
+            print(f"  iterations={args.wmss_iterations}")
+        if local_rank != -1:
+            print(f"DDP enabled: {torch.distributed.get_world_size()} processes, local_rank={local_rank}")
 
     args.prepro_tokenizer = AutoTokenizer.from_pretrained('../base_models/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext')
     temp_path = os.path.join(os.path.join(args.result_save_path, "checkpoint"))
-    if not os.path.exists(temp_path):
+    if args.is_main_process and not os.path.exists(temp_path):
         os.makedirs(temp_path)
+    if local_rank != -1:
+        torch.distributed.barrier()
 
     if "docred" in args.data_dir:
         args.dataset = 'docred'
@@ -662,6 +877,7 @@ if __name__ == "__main__":
     read = read_docred if args.dataset == 'docred' else read_biored
     train_file = os.path.join(args.data_dir, args.train_file)
     train_features = read(train_file, args.prepro_tokenizer, max_seq_length=args.max_seq_length, max_samples = max_samples, use_direction = args.use_direction)
+    # train_features = train_features[:5]
 
     if args.use_extra_training_datasets:
         files = glob.glob(os.path.join('./dataset/biomedical/*.pubtator'))

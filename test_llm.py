@@ -91,6 +91,8 @@ def llm_batch_inference(queries, temperature = 0.0, use_tqdm = False):
             max_model_len=int(args.max_seq_length) + int(args.llm_max_new_tokens),
             enable_prefix_caching=True,
             disable_log_stats=True,
+            gpu_memory_utilization=0.85,
+            enforce_eager=False,
         )
         
         _LOCAL_VLLM_CACHE[cache_key] = (tokenizer, vllm_engine)
