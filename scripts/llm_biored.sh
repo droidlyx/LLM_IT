@@ -13,8 +13,7 @@ SEED=66
 USE_DIRECTION=False
 USE_AUGMENTED_TRAINING=False
 USE_EXTRA_TRAINING_DATASETS=False
-USE_WMSS=True
-RESULT_PATH="./results/biored_finetune/llm_no_direction_wmss"
+RESULT_PATH="./results/biored_finetune/llm_no_direction"
 
 # Set visible GPUs
 export CUDA_VISIBLE_DEVICES=$CUDA_DEVICE
@@ -25,11 +24,10 @@ NUM_GPUS=$(echo $CUDA_DEVICE | tr ',' '\n' | wc -l)
 echo "============================================="
 echo "BioRED LLM Training"
 echo "GPUs: $CUDA_DEVICE (${NUM_GPUS} devices)"
-echo "WMSS: $USE_WMSS"
 echo "Result path: $RESULT_PATH"
 echo "============================================="
 
-## Launch with torchrun for DDP (works for both WMSS and non-WMSS)
+# Training with torchrun for DDP
 torchrun \
 --nproc_per_node=${NUM_GPUS} \
 --master_port=29500 \
@@ -44,9 +42,9 @@ $(if [ "$USE_DIRECTION" = "True" ]; then echo "--use_direction"; fi) \
 $(if [ "$USE_AUGMENTED_TRAINING" = "True" ]; then echo "--use_augmented_training"; fi) \
 --result_save_path $RESULT_PATH \
 $(if [ "$USE_EXTRA_TRAINING_DATASETS" = "True" ]; then echo "--use_extra_training_datasets"; fi) \
-$(if [ "$USE_WMSS" = "True" ]; then echo "--use_wmss"; fi) \
 --phase 1
 
+# Testing
 CUDA_VISIBLE_DEVICES=$CUDA_DEVICE python test_llm.py \
 --data_dir $DATA_DIR \
 --model_name_or_path $MODEL_PATH \

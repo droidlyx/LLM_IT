@@ -68,51 +68,8 @@ def llm_batch_inference(queries, temperature = 0.0, use_tqdm = False):
 
     finetuned_dir = args.load_dir
     lora_request = None
-    
-    # Check if WMSS training was used (multiple iteration adapters exist)
-    wmss_iterations = []
-    for i in range(1, 10):  # Check up to 9 iterations
-        iter_dir = os.path.join(finetuned_dir, f'iteration_{i}')
-        if os.path.isdir(iter_dir) and os.path.exists(os.path.join(iter_dir, 'adapter_config.json')):
-            wmss_iterations.append(iter_dir)
-        else:
-            break
-    
-    if wmss_iterations:
-        # WMSS mode: merge all iteration adapters into base model
-        print(f"\nDetected WMSS training with {len(wmss_iterations)} iterations")
-        print("Loading and merging all iteration adapters...")
-        
-        from transformers import AutoModelForCausalLM
-        from peft import PeftModel
-        
-        # Load base model
-        merged_model = AutoModelForCausalLM.from_pretrained(
-            args.model_name_or_path,
-            dtype=torch.bfloat16,
-            device_map="cpu",
-            low_cpu_mem_usage=True,
-        )
-        
-        # Sequentially load and merge each iteration's adapter
-        for iter_idx, iter_dir in enumerate(wmss_iterations):
-            print(f"  Loading iteration {iter_idx + 1} from {iter_dir}...")
-            merged_model = PeftModel.from_pretrained(merged_model, iter_dir)
-            merged_model = merged_model.merge_and_unload()
-        
-        # Save merged model temporarily for vLLM to load
-        merged_dir = os.path.join(finetuned_dir, 'temp_merged_model')
-        print(f"  Saving merged model to {merged_dir}...")
-        os.makedirs(merged_dir, exist_ok=True)
-        merged_model.save_pretrained(merged_dir)
-        del merged_model
-        torch.cuda.empty_cache()
-        
-        # Update model path to use merged model
-        args.model_name_or_path = merged_dir
-        lora_request = None
-        print(f"  Merged model ready for inference\n")
-    elif os.path.isdir(finetuned_dir) and (
+
+    if os.path.isdir(finetuned_dir) and (
         os.path.exists(os.path.join(finetuned_dir, 'adapter_config.json'))
         or os.path.exists(os.path.join(finetuned_dir, 'adapter_config.yaml'))
     ):
