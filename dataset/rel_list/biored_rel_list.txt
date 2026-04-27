@@ -1,0 +1,8 @@
+Association
+Positive_Correlation
+Negative_Correlation
+Bind
+Cotreatment
+Comparison
+Drug_Interaction
+Conversion

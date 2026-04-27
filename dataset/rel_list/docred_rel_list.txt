@@ -1,0 +1,96 @@
+subject->head of government->object: head of the executive power of this town, city, municipality, state, country, or other governmental body
+subject->country->object: sovereign state that this item is in (not to be used for human beings)
+subject->place of birth->object: most specific known birth location of a person, animal or fictional character
+subject->place of death->object: most specific known (e.g. city instead of country, or hospital instead of city) death location of a person, animal or fictional character
+subject->father->object: male parent of the subject. For stepfather, use "stepparent" (<father>)
+subject->mother->object: female parent of the subject. For stepmother, use "stepparent" (<mother>)
+subject->spouse->object: the subject has the object as their spouse (husband, wife, partner, etc.). Use "unmarried partner" (<spouse>) for non-married companions
+subject->country of citizenship->object: the object is a country that recognizes the subject as its citizen
+subject->continent->object: continent of which the subject is a part
+subject->instance of->object: type to which this subject corresponds/belongs. Different from <instance of> (subclass of); for example: K2 is an instance of mountain; volcano is a subclass of mountain
+subject->head of state->object: official with the highest formal authority in a country/state
+subject->capital->object: seat of government of a country, province, state or other type of administrative territorial entity
+subject->official language->object: language designated as official by this item
+subject->position held->object: subject currently or formerly holds the object position or public office
+subject->child->object: subject has object as child. Do not use for stepchildren-use "relative" (<child>), qualified with "type of kinship" (<child>)
+subject->author->object: main creator(s) of a written work (use on works, not humans); use <author> (author name string) when Wikidata item is unknown or does not exist
+subject->member of sports team->object: sports teams or clubs that the subject represents or represented
+subject->director->object: director(s) of film, TV-series, stageplay, video game or similar
+subject->screenwriter->object: person(s) who wrote the script for subject item
+subject->educated at->object: educational institution attended by subject
+subject->composer->object: person(s) who wrote the music [for lyricist, use "lyrics by" (<composer>)]
+subject->member of political party->object: the political party of which a person is or has been a member or otherwise affiliated
+subject->employer->object: person or organization for which the subject works or worked
+subject->founded by->object: founder or co-founder of this organization, religion, place or entity
+subject->league->object: league or competition in which team or player has played, or in which an event occurs
+subject->publisher->object: organization or person responsible for publishing a work, such as a book, periodical, printed music, podcast, game or software
+subject->owned by->object: owner of the subject
+subject->located in the administrative territorial entity->object: the item is located on the territory of the following administrative entity. Use <located in the administrative territorial entity> for specifying locations that are non-administrative places and for items about events. Use <located in the administrative territorial entity> if the item falls only partially into the administrative entity.
+subject->genre->object: creative work's genre or an artist's field of work (<genre>). Use main subject (<genre>) to relate creative works to their topic
+subject->operator->object: person, profession, organization or entity that operates the equipment, facility, or service
+subject->religion->object: religion of a person, organization or religious building, or associated with this subject
+subject->contains administrative territorial entity->object: (list of) direct subdivisions of an administrative territorial entity
+subject->follows->object: immediately prior item in a series of which the subject is a part, preferably use as qualifier of <follows> [if the subject has replaced the preceding item, e.g. political offices, use "replaces" (<follows>)]
+subject->followed by->object: immediately following item in a series of which the subject is a part, preferably use as qualifier of <followed by> [if the subject has been replaced, e.g. political offices, use "replaced by" (<followed by>)]
+subject->headquarters location->object: city or town where an organization's headquarters is or has been situated. Use <headquarters location> qualifier for specific building
+subject->cast member->object: actor in the subject production [use "character role" (<cast member>) and/or "name of the character role" (<cast member>) as qualifiers] [use "voice actor" (<cast member>) for voice-only role] - [use "recorded participant" (<cast member>) for non-fiction productions]
+subject->producer->object: person(s) who produced the film, musical work, theatrical production, etc. (for film, this does not include executive producers, associate producers, etc.) [for production company, use <producer>, video games - use <producer>]
+subject->award received->object: award or recognition received by a person, organization or creative work
+subject->creator->object: maker of this creative work or other object (where no more specific property exists)
+subject->parent taxon->object: closest parent taxon of the taxon in question
+subject->ethnic group->object: subject's ethnicity (consensus is that a VERY high standard of proof is needed for this field to be used. In general this means 1) the subject claims it themselves, or 2) it is widely agreed on by scholars, or 3) is fictional and portrayed as such)
+subject->performer->object: actor, musician, band or other performer associated with this role or musical work
+subject->manufacturer->object: (main or final) manufacturer or producer of this product
+subject->developer->object: organization or person that developed the item
+subject->series->object: series which contains the subject
+subject->sister city->object: twin towns, sister cities, twinned municipalities and other localities that have a partnership or cooperative agreement, either legally or informally acknowledged by their governments
+subject->legislative body->object: legislative body governing this entity; political institution with elected representatives, such as a parliament/legislature or council
+subject->objectasin country->object: country that have drainage to/from or border the body of water
+subject->located in or next to body of water->object: body of water on or next to which a place is located
+subject->military branch->object: branch to which this military unit, award, office, or person belongs, e.g. Royal Navy
+subject->record label->object: brand and trademark associated with the marketing of subject music recordings and music videos
+subject->production company->object: company that produced this film, audio or performing arts work
+subject->location->object: location of the object, structure or event; use <location> to indicate the containing administrative entity, <location> for statistical entities, or <location> for geographic entities; use <location> for locations associated with the object
+subject->subclass of->object: this item is a subclass (subset) of that item; ALL instances of this item are instances of that item; different from <subclass of> (instance of), e.g.: volcano is a subclass of mountain; Everest is an instance of mountain
+subject->subsidiary->object: child organization/unit of a organization/unit; for companies, generally a fully owned separate corp., see business division (<child organization or unit>); opposite of parent org./unit (<child organization or unit>); use instance of (<child organization or unit>) to distinguish org. (Q43229) and org. unit (Q10387680)
+subject->part of->object: object of which the subject is a part (if this subject is already part of object A which is a part of object B, then please only make the subject part of object A), inverse property of "has part" (<part of>, see also "has parts of the class" (<part of>))
+subject->original language of work->object: language in which a film or a performance work was originally created. Deprecated for written works and songs; use <original language of film or TV show> ("language of work or name") instead.
+subject->platform->object: platform for which a work was developed or released, or the specific platform version of a software product
+subject->mouth of the watercourse->object: the body of water to which the watercourse drains
+subject->original network->object: network(s) or service(s) that originally broadcast a radio or television program
+subject->member of->object: organization, club or musical group to which the subject belongs. Do not use for membership in ethnic or social groups, nor for holding a political position, such as a member of parliament (use <member of> for that)
+subject->chairperson->object: presiding member of an organization, group or body
+subject->country of origin->object: country of origin of this item (creative work, food, phrase, product, etc.)
+subject->has part->object: part of this subject; inverse property of "part of" (<has part(s)>). See also "has parts of the class" (<has part(s)>).
+subject->residence->object: the place where the person is or has been, resident
+subject->date of birth->object: date on which the subject was born
+subject->date of death->object: date on which the subject died
+subject->inception->object: time when an entity begins to exist; for date of official opening use <inception>
+subject->dissolved, abolished or demolished->object: point in time at which the subject (organisation, building) ceased to exist; see "date of official closure" (<dissolved, abolished or demolished date>) for closing a facility, "service retirement" (<dissolved, abolished or demolished date>) for retiring equipment, "discontinued date" (<dissolved, abolished or demolished date>) for stopping a product
+subject->publication date->object: date or point in time when a work or product was first published or released
+subject->start time->object: time an entity begins to exist or a statement starts being valid
+subject->end time->object: moment when an entity ceases to exist and a statement stops being entirely valid or no longer be true
+subject->point in time->object: date something took place, existed or a statement was true; for providing time use the "refine date" property (<point in time>)
+subject->conflict->object: battles, wars or other military engagements in which the person or item participated
+subject->characters->object: characters which appear in this item (like plays, operas, operettas, books, comics, films, TV series, video games)
+subject->lyrics by->object: author of song lyrics
+subject->located on terrain feature->object: located on the specified (geo)physical feature. Should not be used when the value is only political/administrative (<located in/on physical feature>) or a mountain range (<located in/on physical feature>). Use <located in/on physical feature> for things in/on bodies of water.
+subject->participant->object: person, group of people or organization (object) that actively takes/took part in an event or process (subject). Preferably qualify with "object has role" (<participant>). Use <participant> for participants that are teams.
+subject->influenced by->object: the subject (person, idea, etc.) was influenced or inspired by this object entity, e.g. "Heidegger was influenced by Aristotle"
+subject->location of formation->object: location where a group or organization was formed
+subject->parent organization->object: parent organization or unit of an organization or unit, opposite of child organization or unit (<parent organization or unit>); use instance of (<parent organization or unit>) to distinguish organization (Q43229) and organization unit (Q10387680)
+subject->notable work->object: notable scientific, artistic or literary work, or other work of significance among subject's works
+subject->separated from->object: subject was founded or started by separating from identified object
+subject->narrative location->object: the narrative of the work is set in this location
+subject->work location->object: location where persons or organisations were actively participating in employment, business or other work
+subject->applies to jurisdiction->object: the item (institution, law, public office, public register, etc) or statement belongs to or has power over or applies to the value (a territorial jurisdiction: a country, state, municipality, etc)
+subject->product or material produced->object: material or product, including services, produced or provided by an organization, industry, facility, or process
+subject->unemployment rate->object: portion of a workforce population that is not employed
+subject->territory claimed by->object: administrative divisions that claim control of a given area
+subject->participant of->object: event in which a person, organization or creative work was/is a participant; inverse of <participant in> or <participant in>
+subject->replaces->object: person, state or item replaced. Use "structure replaces" (<replaces>) for structures. Use "follows" (<replaces>) if the previous item was not replaced or predecessor and successor are identical
+subject->replaced by->object: other person or item which continues the item by replacing it in its role. Use <replaced by> ("followed by") if the item is not replaced nor identical, but adds to the series (e.g. books in a series).
+subject->capital of->object: country, state, department, canton or other administrative division of which the municipality is the governmental seat
+subject->languages spoken, written or signed->object: language(s) that a person or a people speaks, writes or signs, including the native language(s)
+subject->present in work->object: this (fictional or fictionalized) entity, place, or person appears in that work as part of the narration (use <present in work> for works citing other works, <present in work>/<present in work> for works being part of other works, <present in work> for entities described in non-fictional accounts)
+subject->sibling->object: the subject and the object have at least one common parent (brother, sister, etc. including half-siblings); use "relative" (<sibling>) for siblings-in-law (brother-in-law, sister-in-law, etc.) and step-siblings (step-brothers, step-sisters, etc.)
