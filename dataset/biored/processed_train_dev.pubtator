@@ -133,18 +133,18 @@
 11054569	0	5	Rab6c	GeneOrGeneProduct	84084
 11054569	27	30	rab	GeneOrGeneProduct	5870
 11054569	27	30	rab	GeneOrGeneProduct	84084
-11054569	78	87	MCF7/AdrR	CellLine	 CVCL_1452
+11054569	78	87	MCF7/AdrR	CellLine	CVCL_1452
 11054569	101	105	Rab6	GeneOrGeneProduct	5870
 11054569	120	125	Rab6c	GeneOrGeneProduct	84084
 11054569	207	212	human	OrganismTaxon	9606
 11054569	239	252	breast cancer	DiseaseOrPhenotypicFeature	D001943
-11054569	264	273	MCF7/AdrR	CellLine	 CVCL_1452
+11054569	264	273	MCF7/AdrR	CellLine	CVCL_1452
 11054569	361	366	Rab6c	GeneOrGeneProduct	84084
-11054569	402	411	MCF7/AdrR	CellLine	 CVCL_1452
+11054569	402	411	MCF7/AdrR	CellLine	CVCL_1452
 11054569	416	426	MES-SA/Dx5	CellLine	CVCL_2598
 11054569	430	435	human	OrganismTaxon	9606
 11054569	440	455	uterine sarcoma	DiseaseOrPhenotypicFeature	D014594
-11054569	516	525	MCF7/AdrR	CellLine	 CVCL_1452
+11054569	516	525	MCF7/AdrR	CellLine	CVCL_1452
 11054569	557	562	Rab6c	GeneOrGeneProduct	84084
 11054569	627	638	doxorubicin	ChemicalEntity	D004317
 11054569	640	643	DOX	ChemicalEntity	D004317
@@ -154,7 +154,7 @@
 11054569	821	824	DOX	ChemicalEntity	D004317
 11054569	892	897	Rab6c	GeneOrGeneProduct	84084
 11054569	927	932	Rab6c	GeneOrGeneProduct	84084
-11054569	967	976	MCF7/AdrR	CellLine	 CVCL_1452
+11054569	967	976	MCF7/AdrR	CellLine	CVCL_1452
 11054569	Association	84084	D014594	Novel
 11054569	Positive_Correlation	84084	D014750	Novel
 11054569	Positive_Correlation	84084	D014747	Novel
@@ -7131,7 +7131,9 @@
 16781314|t|Ectodermal dysplasia-skin fragility syndrome resulting from a new homozygous mutation, 888delC, in the desmosomal protein plakophilin 1.
 16781314|a|We report an unusual case of an inherited disorder of the desmosomal protein plakophilin 1, resulting in ectodermal dysplasia-skin fragility syndrome. The affected 6-year-old boy had red skin at birth and subsequently developed skin fragility, progressive plantar keratoderma, nail dystrophy, and alopecia. Skin biopsy revealed widening of intercellular spaces in the epidermis and a reduced number of small, poorly formed desmosomes. Mutation analysis of the plakophilin 1 gene PKP1 revealed a homozygous deletion of C at nucleotide 888 within exon 5. This mutation differs from the PKP1 gene pathology reported in 8 previously published individuals with this rare genodermatosis. However, all cases show similar clinical features, highlighting the importance of functional plakophilin 1 in maintaining desmosomal adhesion in skin, as well as the role of this protein in aspects of ectodermal development.
 16781314	0	44	Ectodermal dysplasia-skin fragility syndrome	DiseaseOrPhenotypicFeature	C536183
-16781314	87	94	888delC	SequenceVariant	c|DEL888|C
+16781314	87	94	888delC	SequenceVariant	c
+16781314	87	94	888delC	SequenceVariant	DEL888
+16781314	87	94	888delC	SequenceVariant	C
 16781314	122	135	plakophilin 1	GeneOrGeneProduct	5317
 16781314	169	187	inherited disorder	DiseaseOrPhenotypicFeature	D030342
 16781314	214	227	plakophilin 1	GeneOrGeneProduct	5317
@@ -7142,15 +7144,21 @@
 16781314	434	442	alopecia	DiseaseOrPhenotypicFeature	D000505
 16781314	597	610	plakophilin 1	GeneOrGeneProduct	5317
 16781314	616	620	PKP1	GeneOrGeneProduct	5317
-16781314	643	674	deletion of C at nucleotide 888	SequenceVariant	c|DEL888|C
+16781314	643	674	deletion of C at nucleotide 888	SequenceVariant	c
+16781314	643	674	deletion of C at nucleotide 888	SequenceVariant	DEL888
+16781314	643	674	deletion of C at nucleotide 888	SequenceVariant	C
 16781314	721	725	PKP1	GeneOrGeneProduct	5317
 16781314	803	817	genodermatosis	DiseaseOrPhenotypicFeature	D012873
 16781314	912	925	plakophilin 1	GeneOrGeneProduct	5317
 16781314	Association	5317	D030342	Novel
 16781314	Association	5317	D012873	No
-16781314	Association	c|DEL888|C	D012873	Novel
+16781314	Association	c	D012873	Novel
+16781314	Association	DEL888	D012873	Novel
+16781314	Association	C	D012873	Novel
 16781314	Association	5317	C536183	Novel
-16781314	Positive_Correlation	c|DEL888|C	C536183	Novel
+16781314	Positive_Correlation	c	C536183	Novel
+16781314	Positive_Correlation	DEL888	C536183	Novel
+16781314	Positive_Correlation	C	C536183	Novel
 
 16843501|t|DNA damage and repair in gastric cancer--a correlation with the hOGG1 and RAD51 genes polymorphisms.
 16843501|a|The cell's susceptibility to mutagens and its ability to repair DNA lesions are important for cancer induction, promotion and progression. Both the mutagens' sensitivity and the efficacy of DNA repair may be affected by variation in several genes, including DNA repair genes. The hOGG1 gene encodes glycosylase of base excision repair and RAD51 specifies a key protein in homologues recombination repair. Both can be involved in the repair of oxidative DNA lesions, which can contribute to stomach cancer. In the present work we determined the level of basal and oxidative DNA damage and the kinetics of removal of DNA damage induced by hydrogen peroxide in peripheral blood lymphocytes of 30 gastric cancer patients and 30 healthy individuals. The metrics from DNA damage and repair study were correlated with the genotypes of common polymorphisms of the hOGG1 and RAD51 genes: a G-->C transversion at 1245 position of the hOGG1 gene producing a Ser-->Cys substitution at the codon 326 (the Ser326Cys polymorphism) and a G-->C substitution at position 135 (5'-untranslated region) of the RAD51 gene (the G135C polymorphism). DNA damage and repair were evaluated by alkaline single cell gel electrophoresis (comet assay) assisted by DNA repair enzymes: endonuclease III (Nth) and formamidopyrimidine-DNA glycosylase (Fpg), preferentially recognizing oxidized DNA bases. The genotypes of the polymorphism were determined by restriction fragment length polymorphism PCR. We observed a strong association between gastric cancer occurrence, impaired DNA repair in human lymphocytes and the G/C genotype of the G135C polymorphism of the RAD51 gene. Moreover, there was a strong correlation between that genotype and stomach cancer occurrence in subjects with high level of oxidatively damaged DNA. We did not observe any correlation between the Ser1245Cys polymorphism of the hOGG1 gene and gastric cancer, including subjects with impaired DNA repair and/or high levels of endogenous oxidative DNA lesions. Therefore, our result suggest that the G135C polymorphism of the RAD51 gene may be linked with gastric cancer by the modulation of the cellular response to oxidative stress and this polymorphism may be a useful additional marker in this disease along with the genetic or/and environmental indicators of oxidative stress.
@@ -12316,9 +12324,15 @@
 18672102	424	429	GATA4	GeneOrGeneProduct	2626
 18672102	442	445	CHD	DiseaseOrPhenotypicFeature	D006331
 18672102	446	454	patients	OrganismTaxon	9606
-18672102	623	629	46delS	SequenceVariant	|DEL|46|S
-18672102	663	674	118-119insA	SequenceVariant	|INS|118_119|A
-18672102	679	691	125-126insAA	SequenceVariant	|INS|125_126|AA
+18672102	623	629	46delS	SequenceVariant	DEL
+18672102	623	629	46delS	SequenceVariant	46
+18672102	623	629	46delS	SequenceVariant	S
+18672102	663	674	118-119insA	SequenceVariant	INS
+18672102	663	674	118-119insA	SequenceVariant	118_119
+18672102	663	674	118-119insA	SequenceVariant	A
+18672102	679	691	125-126insAA	SequenceVariant	INS
+18672102	679	691	125-126insAA	SequenceVariant	125_126
+18672102	679	691	125-126insAA	SequenceVariant	AA
 18672102	728	731	A6V	SequenceVariant	rs199922907
 18672102	733	738	P163S	SequenceVariant	rs387906769
 18672102	740	745	E359K	SequenceVariant	rs368489876
@@ -12363,24 +12377,48 @@
 18672102	Association	rs199922907	D004694	Novel
 18672102	Association	rs199922907	D013771	Novel
 18672102	Association	rs199922907	D006345	Novel
-18672102	Association	|INS|125_126|AA	D004694	Novel
-18672102	Association	|INS|125_126|AA	D013771	Novel
-18672102	Association	|INS|125_126|AA	D006345	Novel
-18672102	Association	|INS|118_119|A	D004694	Novel
-18672102	Association	|INS|118_119|A	D013771	Novel
-18672102	Association	|INS|118_119|A	D006345	Novel
-18672102	Association	|DEL|46|S	D004694	Novel
-18672102	Association	|DEL|46|S	D013771	Novel
-18672102	Association	|DEL|46|S	D006345	Novel
+18672102	Association	INS	D004694	Novel
+18672102	Association	125_126	D004694	Novel
+18672102	Association	AA	D004694	Novel
+18672102	Association	INS	D013771	Novel
+18672102	Association	125_126	D013771	Novel
+18672102	Association	AA	D013771	Novel
+18672102	Association	INS	D006345	Novel
+18672102	Association	125_126	D006345	Novel
+18672102	Association	AA	D006345	Novel
+18672102	Association	INS	D004694	Novel
+18672102	Association	118_119	D004694	Novel
+18672102	Association	A	D004694	Novel
+18672102	Association	INS	D013771	Novel
+18672102	Association	118_119	D013771	Novel
+18672102	Association	A	D013771	Novel
+18672102	Association	INS	D006345	Novel
+18672102	Association	118_119	D006345	Novel
+18672102	Association	A	D006345	Novel
+18672102	Association	DEL	D004694	Novel
+18672102	Association	46	D004694	Novel
+18672102	Association	S	D004694	Novel
+18672102	Association	DEL	D013771	Novel
+18672102	Association	46	D013771	Novel
+18672102	Association	S	D013771	Novel
+18672102	Association	DEL	D006345	Novel
+18672102	Association	46	D006345	Novel
+18672102	Association	S	D006345	Novel
 18672102	Association	rs146017816	D006331	Novel
 18672102	Association	p|SUB|S|429|T	D006331	Novel
 18672102	Association	rs115099192	D006331	Novel
 18672102	Association	rs368489876	D006331	Novel
 18672102	Association	rs387906769	D006331	Novel
 18672102	Association	rs199922907	D006331	Novel
-18672102	Association	|INS|125_126|AA	D006331	Novel
-18672102	Association	|INS|118_119|A	D006331	Novel
-18672102	Association	|DEL|46|S	D006331	Novel
+18672102	Association	INS	D006331	Novel
+18672102	Association	125_126	D006331	Novel
+18672102	Association	AA	D006331	Novel
+18672102	Association	INS	D006331	Novel
+18672102	Association	118_119	D006331	Novel
+18672102	Association	A	D006331	Novel
+18672102	Association	DEL	D006331	Novel
+18672102	Association	46	D006331	Novel
+18672102	Association	S	D006331	Novel
 
 18768591|t|Serum- and glucocorticoid-inducible kinase 1 in doxorubicin-induced nephrotic syndrome.
 18768591|a|Doxorubicin-induced nephropathy leads to epithelial sodium channel (ENaC)-dependent volume retention and renal fibrosis. The aldosterone-sensitive serum- and glucocorticoid-inducible kinase SGK1 has been shown to participate in the stimulation of ENaC and to mediate renal fibrosis following mineralocorticoid and salt excess. The present study was performed to elucidate the role of SGK1 in the volume retention and fibrosis during nephrotic syndrome. To this end, doxorubicin (15 mug/g body wt) was injected intravenously into gene-targeted mice lacking SGK1 (sgk1(-/-)) and their wild-type littermates (sgk1(+/+)). Doxorubicin treatment resulted in heavy proteinuria (>100 mg protein/mg crea) in 15/44 of sgk1(+/+) and 15/44 of sgk1(-/-) mice leading to severe nephrotic syndrome with ascites, lipidemia, and hypoalbuminemia in both genotypes. Plasma aldosterone levels increased in nephrotic mice of both genotypes and was followed by increased SGK1 protein expression in sgk1(+/+) mice. Urinary sodium excretion reached signficantly lower values in sgk1(+/+) mice (15 +/- 5 mumol/mg crea) than in sgk1(-/-) mice (35 +/- 5 mumol/mg crea) and was associated with a significantly higher body weight gain in sgk1(+/+) compared with sgk1(-/-) mice (+6.6 +/- 0.7 vs. +4.1 +/- 0.8 g). During the course of nephrotic syndrome, serum urea concentrations increased significantly faster in sgk1(-/-) mice than in sgk1(+/+) mice leading to uremia and a reduced median survival in sgk1(-/-) mice (29 vs. 40 days in sgk1(+/+) mice). In conclusion, gene-targeted mice lacking SGK1 showed blunted volume retention, yet were not protected against renal fibrosis during experimental nephrotic syndrome.
@@ -12693,14 +12731,26 @@
 28512644	567	575	patients	OrganismTaxon	9606
 28512644	626	635	infection	DiseaseOrPhenotypicFeature	D007239
 28512644	653	657	SOD1	GeneOrGeneProduct	6647
-28512644	658	663	G7958	SequenceVariant	c|Aelle|G|7958
+28512644	658	663	G7958	SequenceVariant	c
+28512644	658	663	G7958	SequenceVariant	Aelle
+28512644	658	663	G7958	SequenceVariant	G
+28512644	658	663	G7958	SequenceVariant	7958
 28512644	665	669	SOD2	GeneOrGeneProduct	6648
-28512644	670	675	T2734	SequenceVariant	c|Aelle|T|2734
+28512644	670	675	T2734	SequenceVariant	c
+28512644	670	675	T2734	SequenceVariant	Aelle
+28512644	670	675	T2734	SequenceVariant	T
+28512644	670	675	T2734	SequenceVariant	2734
 28512644	681	684	CAT	GeneOrGeneProduct	847
-28512644	685	689	C262	SequenceVariant	c|Aelle|C|262
+28512644	685	689	C262	SequenceVariant	c
+28512644	685	689	C262	SequenceVariant	Aelle
+28512644	685	689	C262	SequenceVariant	C
+28512644	685	689	C262	SequenceVariant	262
 28512644	712	722	erysipelas	DiseaseOrPhenotypicFeature	D004886
 28512644	759	763	SOD2	GeneOrGeneProduct	6648
-28512644	764	770	T2734C	SequenceVariant	c|SYB|T2734|C
+28512644	764	770	T2734C	SequenceVariant	c
+28512644	764	770	T2734C	SequenceVariant	SYB
+28512644	764	770	T2734C	SequenceVariant	T2734
+28512644	764	770	T2734C	SequenceVariant	C
 28512644	799	807	patients	OrganismTaxon	9606
 28512644	825	848	erythematous erysipelas	DiseaseOrPhenotypicFeature	D004886
 28512644	883	887	SOD1	GeneOrGeneProduct	6647
@@ -12730,14 +12780,26 @@
 28512644	1320	1324	CCL5	GeneOrGeneProduct	6352
 28512644	1330	1333	HGF	GeneOrGeneProduct	3082
 28512644	1359	1363	SOD2	GeneOrGeneProduct	6648
-28512644	1364	1370	T2734C	SequenceVariant	c|SYB|T2734|C
+28512644	1364	1370	T2734C	SequenceVariant	c
+28512644	1364	1370	T2734C	SequenceVariant	SYB
+28512644	1364	1370	T2734C	SequenceVariant	T2734
+28512644	1364	1370	T2734C	SequenceVariant	C
 28512644	1390	1397	PDFG-BB	GeneOrGeneProduct	5155
 28512644	1402	1406	CCL2	GeneOrGeneProduct	6347
 28512644	1432	1435	CAT	GeneOrGeneProduct	847
 28512644	1436	1441	C262T	SequenceVariant	c|SUB|C|262|T
-28512644	Association	c|Aelle|C|262	D004886	Novel
-28512644	Association	c|Aelle|T|2734	D004886	Novel
-28512644	Association	c|Aelle|G|7958	D004886	Novel
+28512644	Association	c	D004886	Novel
+28512644	Association	Aelle	D004886	Novel
+28512644	Association	C	D004886	Novel
+28512644	Association	262	D004886	Novel
+28512644	Association	c	D004886	Novel
+28512644	Association	Aelle	D004886	Novel
+28512644	Association	T	D004886	Novel
+28512644	Association	2734	D004886	Novel
+28512644	Association	c	D004886	Novel
+28512644	Association	Aelle	D004886	Novel
+28512644	Association	G	D004886	Novel
+28512644	Association	7958	D004886	Novel
 28512644	Association	6347	847	Novel
 28512644	Association	3082	6648	Novel
 28512644	Association	6352	6648	Novel
@@ -12752,7 +12814,10 @@
 28512644	Association	3586	D004886	Novel
 28512644	Association	3578	D004886	Novel
 28512644	Association	3569	D004886	Novel
-28512644	Association	c|SYB|T2734|C	D004886	Novel
+28512644	Association	c	D004886	Novel
+28512644	Association	SYB	D004886	Novel
+28512644	Association	T2734	D004886	Novel
+28512644	Association	C	D004886	Novel
 28512644	Association	6351	D004886	Novel
 28512644	Association	5155	847	Novel
 28512644	Association	5155	D004886	Novel
@@ -18393,7 +18458,8 @@
 19721134	363	369	Ca(2+)	ChemicalEntity	D002118
 19721134	426	437	pilocarpine	ChemicalEntity	D010862
 19721134	469	480	arrhythmias	DiseaseOrPhenotypicFeature	D001145
-19721134	511	551	ventricular tachycardia and fibrillation	DiseaseOrPhenotypicFeature	D017180|D014693
+19721134	511	551	ventricular tachycardia and fibrillation	DiseaseOrPhenotypicFeature	D017180
+19721134	511	551	ventricular tachycardia and fibrillation	DiseaseOrPhenotypicFeature	D014693
 19721134	561	571	arrhythmia	DiseaseOrPhenotypicFeature	D001145
 19721134	614	624	arrhythmic	DiseaseOrPhenotypicFeature	D001145
 19721134	625	629	rats	OrganismTaxon	10116
@@ -18437,7 +18503,8 @@
 19721134	Negative_Correlation	D010862	D010042	Novel
 19721134	Negative_Correlation	D010862	D000157	Novel
 19721134	Negative_Correlation	D010862	D001145	Novel
-19721134	Negative_Correlation	D010862	D017180|D014693	Novel
+19721134	Negative_Correlation	D010862	D017180	Novel
+19721134	Negative_Correlation	D010862	D014693	Novel
 
 19923525|t|Nimodipine prevents memory impairment caused by nitroglycerin-induced hypotension in adult mice.
 19923525|a|BACKGROUND: Hypotension and a resultant decrease in cerebral blood flow have been implicated in the development of cognitive dysfunction. We tested the hypothesis that nimodipine (NIMO) administered at the onset of nitroglycerin (NTG)-induced hypotension would preserve long-term associative memory. METHODS: The passive avoidance (PA) paradigm was used to assess memory retention. For PA training, latencies (seconds) were recorded for entry from a suspended platform into a Plexiglas tube where a shock was automatically delivered. Latencies were recorded 48 h later for a testing trial. Ninety-six Swiss-Webster mice (30-35 g, 6-8 wk), were randomized into 6 groups 1) saline (control), 2) NTG immediately after learning, 3) NTG 3 h after learning, 4) NTG and NIMO, 5) vehicle, and 6) NIMO alone. The extent of hypotension and changes in brain tissue oxygenation (PbtO(2)) and in cerebral blood flow were studied in a separate group of animals. RESULTS: All groups exhibited similar training latencies (17.0 +/- 4.6 s). Mice subjected to hypotensive episodes showed a significant decrease in latency time (178 +/- 156 s) compared with those injected with saline, NTG + NIMO, or delayed NTG (580 +/- 81 s, 557 +/- 67 s, and 493 +/- 146 s, respectively). A Kruskal-Wallis 1-way analysis of variance indicated a significant difference among the 4 treatment groups (H = 15.34; P < 0.001). In a separate group of mice not subjected to behavioral studies, the same dose of NTG (n = 3) and NTG + NIMO (n = 3) caused mean arterial blood pressure to decrease from 85.9 +/- 3.8 mm Hg sem to 31.6 +/- 0.8 mm Hg sem and from 86.2 +/- 3.7 mm Hg sem to 32.6 +/- 0.2 mm Hg sem, respectively. Mean arterial blood pressure in mice treated with NIMO alone decreased from 88.1 +/- 3.8 mm Hg to 80.0 +/- 2.9 mm Hg. The intergroup difference was statistically significant (P < 0.05). PbtO(2) decreased from 51.7 +/- 4.5 mm Hg sem to 33.8 +/- 5.2 mm Hg sem in the NTG group and from 38.6 +/- 6.1 mm Hg sem to 25.4 +/- 2.0 mm Hg sem in the NTG + NIMO groups, respectively. There were no significant differences among groups. CONCLUSION: In a PA retention paradigm, the injection of NTG immediately after learning produced a significant impairment of long-term associative memory in mice, whereas delayed induced hypotension had no effect. NIMO attenuated the disruption in consolidation of long-term memory caused by NTG but did not improve latency in the absence of hypotension. The observed effect of NIMO may have been attributable to the preservation of calcium homeostasis during hypotension, because there were no differences in the PbtO(2) indices among groups.
@@ -18679,14 +18746,16 @@
 20528871	21	31	nelarabine	ChemicalEntity	C104457
 20528871	33	42	etoposide	ChemicalEntity	D005047
 20528871	48	64	cyclophosphamide	ChemicalEntity	D003520
-20528871	99	142	T-cell lymphoblastic leukaemia and lymphoma	DiseaseOrPhenotypicFeature	D015458|D016399
+20528871	99	142	T-cell lymphoblastic leukaemia and lymphoma	DiseaseOrPhenotypicFeature	D015458
+20528871	99	142	T-cell lymphoblastic leukaemia and lymphoma	DiseaseOrPhenotypicFeature	D016399
 20528871	168	178	nelarabine	ChemicalEntity	C104457
 20528871	180	184	AraG	ChemicalEntity	C104457
 20528871	198	207	etoposide	ChemicalEntity	D005047
 20528871	209	211	VP	ChemicalEntity	D005047
 20528871	217	233	cyclophosphamide	ChemicalEntity	D003520
 20528871	235	238	CPM	ChemicalEntity	D003520
-20528871	356	384	T-cell leukaemia or lymphoma	DiseaseOrPhenotypicFeature	D015458|D016399
+20528871	356	384	T-cell leukaemia or lymphoma	DiseaseOrPhenotypicFeature	D015458
+20528871	356	384	T-cell leukaemia or lymphoma	DiseaseOrPhenotypicFeature	D016399
 20528871	435	439	AraG	ChemicalEntity	C104457
 20528871	481	491	neuropathy	DiseaseOrPhenotypicFeature	D009422
 20528871	496	516	musculoskeletal pain	DiseaseOrPhenotypicFeature	D059352
@@ -18701,14 +18770,17 @@
 20528871	941	957	cyclophosphamide	ChemicalEntity	D003520
 20528871	968	989	neurological toxicity	DiseaseOrPhenotypicFeature	D009422
 20528871	Cotreatment	D003520	D005047	Novel
-20528871	Negative_Correlation	D003520	D015458|D016399	Novel
-20528871	Negative_Correlation	D005047	D015458|D016399	Novel
+20528871	Negative_Correlation	D003520	D015458	Novel
+20528871	Negative_Correlation	D003520	D016399	Novel
+20528871	Negative_Correlation	D005047	D015458	Novel
+20528871	Negative_Correlation	D005047	D016399	Novel
 20528871	Positive_Correlation	C104457	D006402	Novel
 20528871	Positive_Correlation	C104457	D059352	Novel
 20528871	Positive_Correlation	C104457	D009422	Novel
 20528871	Cotreatment	C104457	D003520	Novel
 20528871	Cotreatment	C104457	D005047	Novel
-20528871	Negative_Correlation	C104457	D015458|D016399	Novel
+20528871	Negative_Correlation	C104457	D015458	Novel
+20528871	Negative_Correlation	C104457	D016399	Novel
 
 20533999|t|Dopamine is not essential for the development of methamphetamine-induced neurotoxicity.
 20533999|a|It is widely believed that dopamine (DA) mediates methamphetamine (METH)-induced toxicity to brain dopaminergic neurons, because drugs that interfere with DA neurotransmission decrease toxicity, whereas drugs that increase DA neurotransmission enhance toxicity. However, temperature effects of drugs that have been used to manipulate brain DA neurotransmission confound interpretation of the data. Here we show that the recently reported ability of L-dihydroxyphenylalanine to reverse the protective effect of alpha-methyl-para-tyrosine on METH-induced DA neurotoxicity is also confounded by drug effects on body temperature. Further, we show that mice genetically engineered to be deficient in brain DA develop METH neurotoxicity, as long as the thermic effects of METH are preserved. In addition, we demonstrate that mice genetically engineered to have unilateral brain DA deficits develop METH-induced dopaminergic deficits that are of comparable magnitude on both sides of the brain. Taken together, these findings demonstrate that DA is not essential for the development of METH-induced dopaminergic neurotoxicity and suggest that mechanisms independent of DA warrant more intense investigation.
@@ -24419,4 +24491,3 @@
 25119790	Positive_Correlation	C030272	D007674	No
 25119790	Negative_Correlation	D003474	D007674	Novel
 25119790	Negative_Correlation	D003474	C030272	Novel
-

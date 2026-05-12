@@ -870,7 +870,9 @@
 17059986	846	857	c.2633+1G>C	SequenceVariant	c|SUB|G|2633+1|C
 17059986	897	899	GS	DiseaseOrPhenotypicFeature	D053579
 17059986	1074	1085	c.2633+1G>C	SequenceVariant	c|SUB|G|2633+1|C
-17059986	1183	1197	r.2521_2634del	SequenceVariant	r|DEL|2521_2634|
+17059986	1183	1197	r.2521_2634del	SequenceVariant	r
+17059986	1183	1197	r.2521_2634del	SequenceVariant	DEL
+17059986	1183	1197	r.2521_2634del	SequenceVariant	2521_2634
 17059986	1221	1230	potassium	ChemicalEntity	D011188
 17059986	1235	1244	magnesium	ChemicalEntity	D008274
 17059986	1365	1381	Bartter syndrome	DiseaseOrPhenotypicFeature	D001477
@@ -2248,11 +2250,17 @@
 23069675	841	844	CA3	GeneOrGeneProduct	12350
 23069675	932	936	PTEN	GeneOrGeneProduct	19211
 23069675	1010	1013	Akt	GeneOrGeneProduct	11651
-23069675	1015	1021	Ser473	SequenceVariant	p|AellelS|473
+23069675	1015	1021	Ser473	SequenceVariant	p
+23069675	1015	1021	Ser473	SequenceVariant	AellelS
+23069675	1015	1021	Ser473	SequenceVariant	473
 23069675	1027	1033	GSK-3b	GeneOrGeneProduct	56637
-23069675	1035	1039	Ser9	SequenceVariant	p|AellelS|9
+23069675	1035	1039	Ser9	SequenceVariant	p
+23069675	1035	1039	Ser9	SequenceVariant	AellelS
+23069675	1035	1039	Ser9	SequenceVariant	9
 23069675	1110	1113	Bad	GeneOrGeneProduct	12015
-23069675	1115	1121	Ser136	SequenceVariant	p|AellelS|136
+23069675	1115	1121	Ser136	SequenceVariant	p
+23069675	1115	1121	Ser136	SequenceVariant	AellelS
+23069675	1115	1121	Ser136	SequenceVariant	136
 23069675	1128	1131	Bax	GeneOrGeneProduct	12028
 23069675	1265	1268	Bad	GeneOrGeneProduct	12015
 23069675	1273	1276	Bax	GeneOrGeneProduct	12028
@@ -4587,7 +4595,8 @@
 16428827	544	569	4';7-dihydroxy-isoflavone	ChemicalEntity	C004742
 16428827	611	619	daidzein	ChemicalEntity	C004742
 16428827	650	661	scopolamine	ChemicalEntity	D012601
-16428827	670	704	impairments of learning and memory	DiseaseOrPhenotypicFeature	D007859|D008569
+16428827	670	704	impairments of learning and memory	DiseaseOrPhenotypicFeature	D007859
+16428827	670	704	impairments of learning and memory	DiseaseOrPhenotypicFeature	D008569
 16428827	764	772	daidzein	ChemicalEntity	C004742
 16428827	800	804	mice	OrganismTaxon	10090
 16428827	840	851	scopolamine	ChemicalEntity	D012601
@@ -4604,7 +4613,8 @@
 16428827	1398	1405	amnesia	DiseaseOrPhenotypicFeature	D000647
 16428827	Association	D000109	D000544	No
 16428827	Positive_Correlation	D012601	D000647	No
-16428827	Positive_Correlation	D012601	D007859|D008569	No
+16428827	Positive_Correlation	D012601	D007859	No
+16428827	Positive_Correlation	D012601	D008569	No
 16428827	Positive_Correlation	D000432	1103	Novel
 16428827	Association	1103	D000544	No
 16428827	Association	1103	D000109	No
@@ -5105,4 +5115,3 @@
 24840785	Association	D000157	81649	Novel
 24840785	Positive_Correlation	D000157	D002118	Novel
 24840785	Positive_Correlation	D000157	D001145	Novel
-
