@@ -167,10 +167,6 @@ def read_biored(file_in, tokenizer, max_seq_length=1024, max_samples = None, use
                 'novelty': parts[4] if len(parts) == 5 else None
             })
 
-    f = open(f'dataset/rel_list/biored_rel_list.txt', 'w', encoding='utf-8')
-    for rel in temp_rel_list:
-        f.write(f'{rel}\n')
-
     # Process each PMID
     key_list = list(pmid_data.keys())
     if max_samples is not None:

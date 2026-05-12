@@ -415,9 +415,8 @@ if __name__ == "__main__":
     args.verify_prompt = f.read()
     f.close()
 
-    f = open(f'./meta/biored_rel_list.txt', 'r', encoding='utf-8')
-    args.rel_list_str = f.read()
-    args.rel_list = args.rel_list_str.strip('\n').split('\n')
-
     train_features, dev_features, test_features = load_data(args, max_samples = None)
+    # Derive rel_list from prepro output (each feature carries the same vocab)
+    args.rel_list = train_features[0]['rel_list']
+    args.rel_list_str = '\n'.join(args.rel_list)
     evolve_instructions(args, train_features)
