@@ -1,0 +1,22 @@
+Loading model...
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading checkpoint shards:   0%|          | 0/3 [00:00<?, ?it/s]Loading checkpoint shards: 100%|██████████| 3/3 [00:00<00:00, 72.19it/s]
+/root/shared-nvme/ds-workspace/llm_it_env/lib/python3.12/site-packages/peft/tuners/tuners_utils.py:1222: UserWarning: Model has `tie_word_embeddings=True` and a tied layer is part of the adapter, but `ensure_weight_tying` is not set to True. This can lead to complications, for example when merging the adapter or converting your model to formats other than safetensors. Check the discussion here: https://github.com/huggingface/peft/issues/2777
+  warnings.warn(msg)
+  trainable params: 421315584
+  label cache: (27, 5, 2560)
+  step   0: total=5.024 L_cls_S=3.462 acc_S=0.00 acc_T=0.00 align_gap=0.922 mem=12.6GB
+  step   5: total=5.055 L_cls_S=3.256 acc_S=0.00 acc_T=0.00 align_gap=0.929 mem=12.9GB
+  step  10: total=4.854 L_cls_S=3.237 acc_S=0.25 acc_T=0.00 align_gap=0.723 mem=13.0GB
+  step  15: total=3.838 L_cls_S=2.523 acc_S=0.25 acc_T=0.50 align_gap=0.738 mem=13.0GB
+  step  20: total=4.285 L_cls_S=2.929 acc_S=0.50 acc_T=0.50 align_gap=0.750 mem=13.0GB
+  step  25: total=4.561 L_cls_S=3.044 acc_S=0.00 acc_T=0.25 align_gap=0.597 mem=13.0GB
+  step  30: total=1.920 L_cls_S=1.304 acc_S=1.00 acc_T=1.00 align_gap=0.412 mem=13.0GB
+  step  35: total=3.281 L_cls_S=2.216 acc_S=0.50 acc_T=0.50 align_gap=0.299 mem=13.0GB
+  step  40: total=1.273 L_cls_S=0.856 acc_S=1.00 acc_T=1.00 align_gap=0.318 mem=13.0GB
+  step  45: total=3.923 L_cls_S=2.604 acc_S=0.00 acc_T=0.00 align_gap=0.271 mem=13.0GB
+  step  49: total=5.978 L_cls_S=4.001 acc_S=0.00 acc_T=0.00 align_gap=0.246 mem=13.0GB
+
+DONE: 50 steps in 82s (1.6s/step)
+Peak memory: 13.0 GB
+[W519 23:23:35.680734681 AllocatorConfig.cpp:28] Warning: PYTORCH_CUDA_ALLOC_CONF is deprecated, use PYTORCH_ALLOC_CONF instead (function operator())

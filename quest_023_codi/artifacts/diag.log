@@ -1,0 +1,17 @@
+Loading checkpoint shards:   0%|          | 0/3 [00:00<?, ?it/s]Loading checkpoint shards: 100%|██████████| 3/3 [00:00<00:00, 72.42it/s]
+/root/shared-nvme/ds-workspace/llm_it_env/lib/python3.12/site-packages/peft/tuners/tuners_utils.py:1222: UserWarning: Model has `tie_word_embeddings=True` and a tied layer is part of the adapter, but `ensure_weight_tying` is not set to True. This can lead to complications, for example when merging the adapter or converting your model to formats other than safetensors. Check the discussion here: https://github.com/huggingface/peft/issues/2777
+  warnings.warn(msg)
+Training labels (n=27) inter-cosine:
+  mean: +0.546  (v4 baseline: +0.401)
+  max:  +0.928  (v4 baseline: +0.936)
+Top-5 closest pairs:
+  +0.928  ACTIVATOR ↔ Positive_Correlation
+  +0.909  Association ↔ no_relation
+  +0.902  PRODUCT-OF ↔ SUBSTRATE_PRODUCT-OF
+  +0.900  INDIRECT-UPREGULATOR ↔ INDIRECT-DOWNREGULATOR
+  +0.899  INHIBITOR ↔ Negative_Correlation
+
+GATE: INDIRECT-UPREGULATOR ↔ INDIRECT-DOWNREGULATOR cosine = +0.900
+  v4 baseline: +0.936; v5 acceptance: < +0.7
+  -> FAIL
+[W520 00:24:59.356116354 AllocatorConfig.cpp:28] Warning: PYTORCH_CUDA_ALLOC_CONF is deprecated, use PYTORCH_ALLOC_CONF instead (function operator())
