@@ -13,7 +13,7 @@
 为什么难：
 1. **关系类别多、细**：DrugProt 13种，BioRED 8种，整合所有数据集27+种，很多语义相近（如 UPREGULATOR vs DOWNREGULATOR）
 2. **每个数据集schema不同**：换一个benchmark就要重标数据；现有最强模型BioREx用了38K人工标注才达到~0.8 macro F1
-3. **绝大多数实体对没有关系**：DrugProt里97%的候选pair是 `no_relation`（负样本），但研究界长期只evaluate正样本，导致虚高的报告数
+3. **绝大多数实体对没有关系**：DrugProt里97%的候选pair是 `no_relation`（负样本）。BioREx等正经baseline都是full-RE evaluation（含负样本），我们Quest 022漏掉了这一步
 
 我们的目标：**用LLM + 极少标注做到接近BioREx的效果**（少标注成本，多schema覆盖）。
 
@@ -64,18 +64,18 @@
 
 ---
 
-## 3. Quest 023的起点：发现Quest 022的数字是**positive-only artifact**
+## 3. Quest 023的起点：发现Quest 022自己的eval protocol错了
 
 ### 发现
 
-Quest 022的0.696 DrugProt是在**只评估有正样本标注的候选pair**的协议下计算的。把 `no_relation` 负样本（占97%）也加入evaluation：
+Quest 022的0.696 DrugProt是在**我们自己写的eval脚本里只evaluate有正样本标注的候选pair**——漏掉了 `no_relation` 负样本（占97%）。这不是研究界惯例，BioREx等正经baseline都是full-RE evaluation。补上负样本后：
 
 | Eval protocol | DrugProt macro F1 | BioRED macro F1 |
 |---|---|---|
-| Positive-only（论文报告） | 0.696 | 0.22 |
-| **Full-RE（含no_relation）** | **0.039** | **0.105** |
+| 我们Quest 022的eval（错） | 0.696 | 0.22 |
+| **Full-RE（正确的协议）** | **0.039** | **0.105** |
 
-为什么塌：模型训练时没见过 `no_relation`，把每个候选pair都强行分到最相近的positive标签。Reviewers会拒。
+为什么塌：模型训练时没见过 `no_relation`，把每个候选pair都强行分到最相近的positive标签。Reviewers会立刻指出。
 
 **Quest 023的使命**：做正确的full-RE，并扩展到multi-schema。
 
