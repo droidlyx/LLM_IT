@@ -1,3 +1,4 @@
+import os
 from math import e
 from tqdm import tqdm
 import ujson as json
@@ -112,6 +113,70 @@ def read_docred(file_in, tokenizer, max_seq_length=1024, max_samples = None, use
     print("Max document length: {}.".format(maxlen))
     return features
 
+# Concept merging: canonicalize entity-type names across heterogeneous datasets
+# so the model sees the same surface tag for the same biomedical concept.
+# - BioRED 用 GeneOrGeneProduct,DrugProt 用 GENE-Y/GENE-N/GENE,others 用 Gene.
+# - BioRED ChemicalEntity vs DrugProt CHEMICAL vs DDI drug/group/brand/drug_n.
+# - Disease/DiseaseOrPhenotypicFeature.
+# - SequenceVariant 包含 ProteinMutation/DNAMutation/etc.
+ENTITY_TYPE_CANONICAL = {
+    # Gene/Protein concept
+    "GeneOrGeneProduct": "Gene", "Gene": "Gene", "GENE-Y": "Gene",
+    "GENE-N": "Gene", "GENE": "Gene", "Protein": "Gene", "gene": "Gene",
+    # Chemical/Drug concept
+    "ChemicalEntity": "Chemical", "Chemical": "Chemical", "CHEMICAL": "Chemical",
+    "drug": "Chemical", "drug_n": "Chemical", "group": "Chemical",
+    "brand": "Chemical", "Drug": "Chemical",
+    # Disease/Phenotype concept
+    "DiseaseOrPhenotypicFeature": "Disease", "Disease": "Disease",
+    "Phenotype": "Disease", "PhenotypicFeature": "Disease",
+    # Variant concept
+    "SequenceVariant": "Variant", "Variant": "Variant",
+    "ProteinMutation": "Variant", "DNAMutation": "Variant",
+    "ProteinAcidChange": "Variant", "DNAAcidChange": "Variant",
+    "SNP": "Variant", "ProteinAllele": "Variant", "DNAAllele": "Variant",
+    # Organism
+    "OrganismTaxon": "Organism", "Species": "Organism",
+    # CellLine
+    "CellLine": "CellLine",
+}
+
+
+def canonical_entity_type(raw_type):
+    """Normalize entity-type name to a small canonical vocab.
+
+    Unknown types pass through unchanged so we keep ability to spot novel types.
+    """
+    return ENTITY_TYPE_CANONICAL.get(raw_type, raw_type)
+
+
+# Map filename (basename without extension) -> canonical dataset name shown
+# to the model via the [Dataset] prompt slot.
+DATASET_NAME_MAP = {
+    "processed_train_dev": "BioRED",
+    "processed_test": "BioRED",
+    "processed_bc8_test": "BioRED",
+    "bioredirect_train_dev": "BioRED",
+    "bioredirect_test": "BioRED",
+    "bioredirect_bc8_test": "BioRED",
+    "drugprot": "DrugProt",
+    "ddi": "DDI",
+    "cdr": "BC5CDR",
+    "gda": "GDA",
+    "disgenet": "DisGeNET",
+    "aimed": "AIMed",
+    "hprd50": "HPRD50",
+    "emu": "EMU",
+    "pharmgkb": "PharmGKB",
+}
+
+
+def _normalize_dataset_name(file_path):
+    """Return a human-readable dataset tag for the [Dataset] prompt slot."""
+    base = os.path.basename(file_path).split('.')[0]
+    return DATASET_NAME_MAP.get(base, base)
+
+
 def read_biored(file_in, tokenizer, max_seq_length=1024, max_samples = None, use_direction = False):
     pmids = set()
     features = []
@@ -177,13 +242,18 @@ def read_biored(file_in, tokenizer, max_seq_length=1024, max_samples = None, use
         data = pmid_data[pmid]
         text = data['title'] + ' ' + data['abstract']
         
-        # Build entity ID to character positions mapping
+        # Build entity ID to character positions mapping + canonical type lookup
         entity_id_to_char_positions = {}
+        entity_id_to_type = {}  # ent_id -> canonical type (first non-conflicting wins)
         for ent in data['entities']:
             ent_id = ent['id']
             if ent_id not in entity_id_to_char_positions:
                 entity_id_to_char_positions[ent_id] = []
             entity_id_to_char_positions[ent_id].append((ent['start'], ent['end']))
+            canon = canonical_entity_type(ent['type'])
+            # Same ID with multiple types is rare but does happen (e.g. gene/protein dual roles);
+            # keep the first observed canonical type for stability.
+            entity_id_to_type.setdefault(ent_id, canon)
         
         # Collect all entity boundaries
         entity_pos_set = set()
@@ -257,10 +327,12 @@ def read_biored(file_in, tokenizer, max_seq_length=1024, max_samples = None, use
         # Build entity positions in wordpiece token space
         ent2idx = {}
         entity_pos = []
-        
+        entity_types = []  # parallel to entity_pos, one canonical type per ent2idx slot
+
         for ent_id in entity_id_to_char_positions.keys():
             if ent_id not in ent2idx:
                 ent2idx[ent_id] = len(ent2idx)
+                entity_types.append(entity_id_to_type.get(ent_id, "Unknown"))
                 positions = []
                 
                 for start_char, end_char in entity_id_to_char_positions[ent_id]:
@@ -331,11 +403,12 @@ def read_biored(file_in, tokenizer, max_seq_length=1024, max_samples = None, use
         feature = {
             'input_ids': input_ids,
             'entity_pos': entity_pos,
+            'entity_types': entity_types,
             'labels': relations,
             'hts': hts,
             'title': pmid,
             'rel_list': temp_rel_list,
-            'dataset_name': file_in.split('/')[-1].split('\\')[-1].split('.')[0]
+            'dataset_name': _normalize_dataset_name(file_in),
         }
         features.append(feature)
 

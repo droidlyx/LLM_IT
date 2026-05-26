@@ -169,6 +169,13 @@ def construct_llm_input(args, prompt, feature, labels = None):
     original_doc, entity_names = feature2text(args, feature['input_ids'][0], feature['entity_pos'][0])
     queries = []
     rel_dict = {}
+    dataset_name = feature.get('dataset_name', [''])[0] if isinstance(feature.get('dataset_name'), list) else feature.get('dataset_name', '')
+    entity_types = feature.get('entity_types', [[]])[0] if isinstance(feature.get('entity_types'), list) else feature.get('entity_types', [])
+    if not entity_types:
+        entity_types = ['Unknown'] * len(entity_names)
+
+    def _etype(idx):
+        return entity_types[idx] if idx < len(entity_types) else 'Unknown'
 
     for local_idx, ht in enumerate(feature['hts'][0]):
         h_idx, t_idx = ht[0], ht[1]
@@ -182,13 +189,13 @@ def construct_llm_input(args, prompt, feature, labels = None):
 
     for i in range(len(entity_names)):
         output_str = ''
-        ent1 = f'{{{i}|{entity_names[i]}}}'
+        ent1 = f'{{{i}|{entity_names[i]}|{_etype(i)}}}'
         q_cnt = 1
         phrase = f'from {ent1} to' if args.use_direction else f'between {ent1} and'
         questions = f'What is the relation {phrase} the following entities?\n'
         for j in range(len(entity_names)):
             if i!=j:
-                ent2 = f'{{{j}|{entity_names[j]}}}'
+                ent2 = f'{{{j}|{entity_names[j]}|{_etype(j)}}}'
                 output_type = 'None'
                 if (i,j) in rel_dict:
                     for rel in rel_dict[(i,j)]:
@@ -202,13 +209,15 @@ def construct_llm_input(args, prompt, feature, labels = None):
 
         llm_input = prompt.replace('[Input Text]', original_doc)
         llm_input = llm_input.replace('[Relation list]', args.rel_list_str)
+        llm_input = llm_input.replace('[Relation List]', args.rel_list_str)
+        llm_input = llm_input.replace('[Dataset]', dataset_name or 'BioRED')
         if args.examples is not None:
             examples = '\n'.join(random.sample(args.examples, args.num_examples))
             llm_input = llm_input.replace('[Examples]', examples)
         llm_input = llm_input.replace('[Questions]', questions)
         query = {'instruction': '', 'input': llm_input, 'output': output_str if labels is not None else ''}
         queries.append(query)
-        
+
     return queries
 
 def evolve_instructions(args, train_features):
@@ -219,6 +228,9 @@ def evolve_instructions(args, train_features):
                     'attention_mask': batch[1].to(args.device),
                     'entity_pos': batch[3],
                     'hts': batch[4],
+                    'rel_list': batch[5],
+                    'dataset_name': batch[6],
+                    'entity_types': batch[7],
                     })
         labels = batch[2][0]
         queries = construct_llm_input(args, args.extract_prompt, feature)

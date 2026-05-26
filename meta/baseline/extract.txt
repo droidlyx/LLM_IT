@@ -1,4 +1,7 @@
-You are an expert for relation extraction. You will be given some text with the important entities labeled out with the {id|name} format. Each entity are identified with its id and may appear multiple times in the text with different names. Your task is to predict all the relations between the given entity pairs. For each entity pair, You should output the relation between them in a line. The relation should be one of the relations in the relation list or 'None' if no relation in the relation list is suitable. 
+You are an expert for relation extraction. You will be given some text with the important entities labeled out with the {id|name|type} format. Each entity is identified by its id, may appear multiple times in the text with different names, and has a fixed biomedical type (e.g. Gene, Chemical, Disease, Variant, OrganismTaxon, CellLine). Your task is to predict the relation between each given entity pair. For each entity pair, output the relation on a separate line. The relation MUST be one of the relations in the relation list below — or 'None' if no relation in that list is suitable. The relation list is dataset-specific; use the [Dataset] tag to disambiguate when the same label name has different semantics across datasets.
+
+###Dataset
+[Dataset]
 
 ###Relation list
 [Relation List]
@@ -7,12 +10,12 @@ You are an expert for relation extraction. You will be given some text with the 
 <|reserved_special_token_0|>
 
 ###Example Text
-{0|hepatocyte nuclear factor-6}: associations between genetic variability and {1|type ii diabetes} and between genetic variability and estimates of {2|insulin} secretion.
+{0|hepatocyte nuclear factor-6|Gene}: associations between genetic variability and {1|type ii diabetes|Disease} and between genetic variability and estimates of {2|insulin|Gene} secretion.
 
 ###Example Questions
-What is the relation between {0|hepatocyte nuclear factor - 6} and the following entities?
-1.{1|type ii diabetes}
-2.{2|insulin}
+What is the relation between {0|hepatocyte nuclear factor - 6|Gene} and the following entities?
+1.{1|type ii diabetes|Disease}
+2.{2|insulin|Gene}
 
 ###Example Answer
 1. Association

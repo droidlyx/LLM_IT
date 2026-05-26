@@ -3,7 +3,8 @@ import os
 import torch
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments
-from utils import set_seed, collate_fn, construct_llm_input
+from utils import (set_seed, collate_fn, construct_llm_input,
+                   compute_label_frequency, make_label_weights)
 from prepro import read_docred, read_biored
 import multiprocessing as mp
 from tqdm import tqdm
@@ -36,6 +37,24 @@ def parse_arguments():
     parser.add_argument("--use_direction", action="store_true")
     parser.add_argument("--use_augmented_training", action="store_true")
     parser.add_argument("--use_extra_training_datasets", action="store_true")
+    parser.add_argument("--extra_datasets", default="drugprot,ddi", type=str,
+                        help="Comma-separated names of extra datasets to add when "
+                             "--use_extra_training_datasets is set. Looked up under "
+                             "./dataset/Biomedical/processed/{name}.pubtator. "
+                             "Default 'drugprot,ddi' (rich-schema datasets only).")
+    parser.add_argument("--extra_datasets_dir", default="./dataset/Biomedical/processed",
+                        type=str, help="Directory containing extra dataset pubtator files.")
+    parser.add_argument("--duplicate_main_dataset", type=int, default=2,
+                        help="How many times to replicate the main BioRED dataset when "
+                             "mixing with extras (counters BioRED being smaller).")
+    parser.add_argument("--loss_reweight", action="store_true",
+                        help="Apply per-(entity_type_h, entity_type_t, relation_label) "
+                             "inverse-frequency loss weighting. Combats class imbalance "
+                             "between rare relation types and the dominant 'None' class.")
+    parser.add_argument("--loss_reweight_smoothing", type=float, default=10.0,
+                        help="Smoothing constant for inverse-sqrt-frequency weights.")
+    parser.add_argument("--loss_reweight_max_ratio", type=float, default=10.0,
+                        help="Cap max(weight) / min(weight) to this ratio.")
 
     parser.add_argument("--seed", type=int, default=66,
                         help="random seed for initialization")
@@ -88,7 +107,8 @@ def finetune_llm(args, train_features, continue_training = False, previous_outpu
                     'entity_pos': batch[3],
                     'hts': batch[4],
                     'rel_list': batch[5],
-                    'dataset_name': batch[6]
+                    'dataset_name': batch[6],
+                    'entity_types': batch[7],
                     })
         labels = batch[2][0]
 
@@ -193,7 +213,9 @@ def finetune_llm(args, train_features, continue_training = False, previous_outpu
             obj = self.items[idx]
             prompt_text = _build_chat_or_text_prompt(obj, self.tokenizer)
             output_text = obj.get('output') or ''
-            
+            output_lines = obj.get('output_lines') or []
+            output_line_weights = obj.get('output_line_weights') or []
+
             # Tokenize prompt and output separately to ensure accurate prompt length
             prompt_enc = self.tokenizer(
                 prompt_text,
@@ -211,29 +233,54 @@ def finetune_llm(args, train_features, continue_training = False, previous_outpu
                 max_length=self.max_length - prompt_enc['input_ids'].shape[1],
                 return_tensors='pt',
             )
-            
-            # Concatenate prompt and output tokens
+
             prompt_ids = prompt_enc['input_ids'][0]
             output_ids = output_enc['input_ids'][0]
+
+            # Build per-output-token weights by re-tokenizing each output line
+            # individually and assigning the line's weight to those tokens.
+            # Falls back to uniform 1.0 if line metadata is absent.
+            loss_weights_out = torch.ones_like(output_ids, dtype=torch.float)
+            if output_lines and output_line_weights and len(output_lines) == len(output_line_weights):
+                cursor = 0
+                accum = ""
+                for line, w in zip(output_lines, output_line_weights):
+                    accum_prev = accum
+                    accum = accum + line
+                    # tokens added by this line
+                    enc_prev = self.tokenizer(accum_prev, add_special_tokens=False,
+                                              return_tensors='pt')['input_ids'][0]
+                    enc_cur = self.tokenizer(accum, add_special_tokens=False,
+                                             return_tensors='pt')['input_ids'][0]
+                    start = enc_prev.shape[0]
+                    end = enc_cur.shape[0]
+                    if end > start and end <= loss_weights_out.shape[0]:
+                        loss_weights_out[start:end] = float(w)
+                    cursor = end
 
             if self.tokenizer.eos_token_id is not None:
                 if output_ids.numel() == 0 or int(output_ids[-1].item()) != int(self.tokenizer.eos_token_id):
                     output_ids = torch.cat([output_ids, torch.tensor([self.tokenizer.eos_token_id], dtype=output_ids.dtype)], dim=0)
+                    loss_weights_out = torch.cat([loss_weights_out, torch.tensor([1.0], dtype=loss_weights_out.dtype)], dim=0)
+
             combined_ids = torch.cat([prompt_ids, output_ids], dim=0)
+            # weights for prompt tokens are 0 (they have labels=-100 anyway, but keep parallel shape)
+            prompt_weights = torch.zeros(prompt_ids.shape[0], dtype=torch.float)
+            loss_weights = torch.cat([prompt_weights, loss_weights_out], dim=0)
 
             input_ids = combined_ids[:self.max_length]
+            loss_weights = loss_weights[:self.max_length]
             attention_mask = torch.ones_like(input_ids)
 
             labels = input_ids.clone()
             prompt_length = prompt_ids.shape[0]
-            
-            # Mask prompt tokens - only compute loss on output tokens
             labels[:prompt_length] = -100
-            
+
             return {
                 'input_ids': input_ids,
                 'attention_mask': attention_mask,
                 'labels': labels,
+                'loss_weights': loss_weights,
                 'length': int(attention_mask.sum().item()),
             }
 
@@ -305,9 +352,55 @@ def finetune_llm(args, train_features, continue_training = False, previous_outpu
             pad = batch['input_ids'].shape[1] - labels.shape[1]
             labels = torch.nn.functional.pad(labels, (0, pad), value=-100)
         batch['labels'] = labels
+
+        # Pack per-token loss weights (parallel to labels). Pad with 0.0.
+        if 'loss_weights' in features[0]:
+            lw = [f['loss_weights'] for f in features]
+            lw = torch.nn.utils.rnn.pad_sequence(lw, batch_first=True, padding_value=0.0)
+            if lw.shape[1] > batch['input_ids'].shape[1]:
+                lw = lw[:, :batch['input_ids'].shape[1]]
+            elif lw.shape[1] < batch['input_ids'].shape[1]:
+                pad = batch['input_ids'].shape[1] - lw.shape[1]
+                lw = torch.nn.functional.pad(lw, (0, pad), value=0.0)
+            batch['loss_weights'] = lw
         return batch
 
-    trainer = Trainer(
+    class _WeightedTrainer(Trainer):
+        """Trainer that uses per-token loss weights when batch contains them.
+
+        For samples without explicit weights (loss_weights all zeros on output
+        tokens, which can't happen here, or absent entirely), falls back to
+        standard mean CE so behavior matches the unweighted baseline.
+        """
+        def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+            loss_weights = inputs.pop('loss_weights', None)
+            labels = inputs.get('labels')
+            outputs = model(**inputs)
+            logits = outputs.logits
+            if loss_weights is None or labels is None:
+                loss = outputs.loss
+                return (loss, outputs) if return_outputs else loss
+            # Shift for causal LM: predict tok t+1 from tok t.
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            shift_weights = loss_weights[..., 1:].contiguous()
+            loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+            ce = loss_fct(
+                shift_logits.view(-1, shift_logits.size(-1)),
+                shift_labels.view(-1),
+            )  # shape: (B*T,)
+            w = shift_weights.view(-1)
+            # only token positions with label != -100 contribute (loss_fct already
+            # zeros them via reduction='none', but the weight mask also handles it)
+            mask = (shift_labels.view(-1) != -100).float()
+            ce = ce * mask
+            weighted_ce = ce * w
+            denom = (w * mask).sum().clamp(min=1.0)
+            loss = weighted_ce.sum() / denom
+            return (loss, outputs) if return_outputs else loss
+
+    trainer_cls = _WeightedTrainer if args.loss_reweight else Trainer
+    trainer = trainer_cls(
         model=model,
         args=training_args,
         train_dataset = train_dataset,
@@ -382,12 +475,43 @@ if __name__ == "__main__":
     # train_features = train_features[:5]
 
     if args.use_extra_training_datasets:
-        files = glob.glob(os.path.join('./dataset/biomedical/*.pubtator'))
-        # Duplicate the original dataset for increased training weight
-        train_features = train_features + train_features
+        # Resolve allowlisted extra datasets from --extra_datasets
+        allowlist = [d.strip() for d in args.extra_datasets.split(",") if d.strip()]
+        files = []
+        for name in allowlist:
+            candidate = os.path.join(args.extra_datasets_dir, f"{name}.pubtator")
+            if os.path.exists(candidate):
+                files.append(candidate)
+            else:
+                print(f"  WARNING: extra dataset not found: {candidate}")
+        # Replicate the main dataset so it doesn't get drowned out by larger extras.
+        if args.duplicate_main_dataset > 1:
+            train_features = train_features * args.duplicate_main_dataset
         for file in files:
-            print("Processing file: ", file)
+            print("Processing extra dataset: ", file)
             train_features = train_features + read(file, args.prepro_tokenizer, max_seq_length=args.max_seq_length, max_samples = max_samples, use_direction = args.use_direction)
+
+    # Build per-(entity_type_pair, relation_label) inverse-frequency weights.
+    args.label_weights = {}
+    if args.loss_reweight:
+        if args.is_main_process:
+            print("Computing label-frequency weights for loss reweighting...")
+        label_counts = compute_label_frequency(train_features)
+        args.label_weights = make_label_weights(
+            label_counts,
+            smoothing=args.loss_reweight_smoothing,
+            max_ratio=args.loss_reweight_max_ratio,
+        )
+        if args.is_main_process:
+            print(f"  observed {len(label_counts)} unique (e_h_type, e_t_type, label) triples")
+            # show top-5 most up-weighted (rare) and most down-weighted (common) triples
+            sorted_w = sorted(args.label_weights.items(), key=lambda x: -x[1])
+            print("  top 5 up-weighted (rare):")
+            for k, v in sorted_w[:5]:
+                print(f"    {k}: w={v:.3f} (count={label_counts[k]})")
+            print("  top 5 down-weighted (common):")
+            for k, v in sorted_w[-5:]:
+                print(f"    {k}: w={v:.3f} (count={label_counts[k]})")
 
     print("Training, Phase: ", args.phase)
     if args.phase == 1:

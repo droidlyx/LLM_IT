@@ -13,6 +13,62 @@ def set_seed(args):
     if args.n_gpu > 0 and torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
 
+
+def compute_label_frequency(features):
+    """Count (entity_type_h, entity_type_t, relation_label) triples in train features.
+
+    The "relation_label" is the string the model is trained to emit:
+    one of the per-dataset relation names or the literal 'None' for negative
+    pairs. We pool counts across datasets so a triple that's rare in BioRED
+    but common in DrugProt gets a smoothed weight.
+    """
+    from collections import Counter
+    counts = Counter()
+    for feat in features:
+        entity_types = feat.get('entity_types') or []
+        rel_list = feat.get('rel_list') or []
+        labels = feat.get('labels') or []
+        hts = feat.get('hts') or []
+        n_ent = len(entity_types)
+        for local_idx, ht in enumerate(hts):
+            if local_idx >= len(labels):
+                continue
+            h, t = ht[0], ht[1]
+            if h >= n_ent or t >= n_ent:
+                continue
+            eh, et = entity_types[h], entity_types[t]
+            row = labels[local_idx]
+            # idx 0 = "None"; idx k+1 = rel_list[k]
+            positives = [i for i, v in enumerate(row) if v == 1]
+            if not positives or (len(positives) == 1 and positives[0] == 0):
+                counts[(eh, et, 'None')] += 1
+            else:
+                for rid in positives:
+                    if rid == 0:
+                        continue
+                    if rid - 1 < len(rel_list):
+                        counts[(eh, et, rel_list[rid - 1])] += 1
+    return counts
+
+
+def make_label_weights(counts, smoothing=10.0, max_ratio=10.0):
+    """Turn triple counts into per-triple loss weights.
+
+    weight ∝ 1 / sqrt(count + smoothing). Then normalize so the mean weight over
+    observed triples is 1.0, and clamp the ratio max_weight/min_weight so a
+    single ultra-rare triple can't blow up gradients.
+    """
+    if not counts:
+        return {}
+    raw = {k: 1.0 / ((c + smoothing) ** 0.5) for k, c in counts.items()}
+    mean_w = sum(raw.values()) / len(raw)
+    weights = {k: v / mean_w for k, v in raw.items()}
+    # clamp range
+    lo = 1.0 / max_ratio
+    hi = max_ratio
+    weights = {k: max(lo, min(hi, v)) for k, v in weights.items()}
+    return weights
+
 def collate_fn(batch):
     max_len = max([len(f["input_ids"]) for f in batch])
     input_ids = [f["input_ids"] + [0] * (max_len - len(f["input_ids"])) for f in batch]
@@ -22,9 +78,10 @@ def collate_fn(batch):
     hts = [f["hts"] for f in batch]
     rel_list = [f['rel_list'] for f in batch]
     dataset_name = [f['dataset_name'] for f in batch]
+    entity_types = [f.get('entity_types', []) for f in batch]
     input_ids = torch.tensor(input_ids, dtype=torch.long)
     input_mask = torch.tensor(input_mask, dtype=torch.float)
-    output = (input_ids, input_mask, labels, entity_pos, hts, rel_list, dataset_name)
+    output = (input_ids, input_mask, labels, entity_pos, hts, rel_list, dataset_name, entity_types)
     return output
 
 def text2data(args, original_batch, text_input):
@@ -218,7 +275,7 @@ def remove_spaces(input_text):
 
     return output_text
 
-def feature2text(args, input_ids, entity_pos, aug_rate = 0):
+def feature2text(args, input_ids, entity_pos, aug_rate = 0, entity_types = None):
     # Decode input_ids to tokens
     tokens = args.prepro_tokenizer.convert_ids_to_tokens(input_ids)
     
@@ -319,7 +376,12 @@ def feature2text(args, input_ids, entity_pos, aug_rate = 0):
                 ent_name = remove_spaces(temp_str)
                 if random.random() < aug_rate:
                     ent_name = f'Entity{entity_idx}'
-                labeled_text += ent_name + "}"
+                # Append type tag if available so the inline marker matches the
+                # `{id|name|type}` format used in the prompt header and questions.
+                type_suffix = ""
+                if entity_types is not None and entity_idx < len(entity_types):
+                    type_suffix = f"|{entity_types[entity_idx]}"
+                labeled_text += ent_name + type_suffix + "}"
                 temp_str = None
 
     labeled_text = labeled_text.replace('*{', '{')
@@ -415,13 +477,18 @@ def pair_generate(args, original_doc, questions, answers, rel_list_str):
 
 
 def construct_llm_input(args, feature, labels = None, generate_data = False, previous_outputs = None, aug_rate = 0, shuffle = False):
-    original_doc, entity_names = feature2text(args, feature['input_ids'][0], feature['entity_pos'][0], aug_rate = aug_rate)
     queries = []
     rel_dict = {}
     rel_list = feature['rel_list'][0]
     rel_list_str = '\n'.join(rel_list)
     extract_prompt = args.extract_prompt
     use_direction = args.use_direction
+    dataset_name = feature.get('dataset_name', [''])[0] if isinstance(feature.get('dataset_name'), list) else feature.get('dataset_name', '')
+    entity_types = feature.get('entity_types', [[]])[0] if isinstance(feature.get('entity_types'), list) else feature.get('entity_types', [])
+    original_doc, entity_names = feature2text(args, feature['input_ids'][0], feature['entity_pos'][0],
+                                              aug_rate=aug_rate, entity_types=entity_types if entity_types else None)
+    if not entity_types:
+        entity_types = ['Unknown'] * len(entity_names)
 
     if shuffle:
         sents = original_doc.split('.')
@@ -437,46 +504,65 @@ def construct_llm_input(args, feature, labels = None, generate_data = False, pre
                 if rel_id != 0:
                     rel_dict.setdefault((h_idx, t_idx), []).append(rel_id - 1)
 
-    # Pre-compute entity strings to avoid repeated formatting
-    entity_strings = [f'{{{i}|{entity_names[i]}}}' for i in range(len(entity_names))]
-    
+    # Pre-compute entity strings with canonical type tag: {idx|name|Type}
+    def _etype(idx):
+        return entity_types[idx] if idx < len(entity_types) else 'Unknown'
+    entity_strings = [f'{{{i}|{entity_names[i]}|{_etype(i)}}}' for i in range(len(entity_names))]
+
     # Pre-compute phrase to avoid conditional in loop
     phrase_template = 'from {} to' if use_direction else 'between {} and'
 
+    label_weights_table = getattr(args, 'label_weights', None) or {}
+
     for i in range(len(entity_names)):
         output_str_parts = []
+        output_line_weights = []   # one float per output line
         ent1 = entity_strings[i]
         phrase = phrase_template.format(ent1)
         questions_parts = [f'What is the relation {phrase} the following entities?\n']
-        
+
         for j in range(len(entity_names)):
             if i != j:
                 ent2 = entity_strings[j]
                 rel_pair = rel_dict.get((i, j), [])
-                
+
                 if rel_pair:
-                    output_type = rel_list[rel_pair[0]]
+                    primary_label = rel_list[rel_pair[0]]
+                    output_type = primary_label
                     if len(rel_pair) > 1:
                         output_type += ',' + ','.join(rel_list[rel] for rel in rel_pair[1:])
                 else:
+                    primary_label = 'None'
                     output_type = 'None'
-                
+
+                # per-line weight from (entity_type_h, entity_type_t, primary_label)
+                w = label_weights_table.get((_etype(i), _etype(j), primary_label), 1.0)
+                output_line_weights.append(float(w))
+
                 output_str_parts.append(f'{len(output_str_parts) + 1}. ' + output_type + '\n')
                 questions_parts.append(f'{len(output_str_parts)}.{ent2}\n')
 
         output_str = ''.join(output_str_parts)
+        output_lines = output_str_parts  # keep parallel to output_line_weights
         questions = ''.join(questions_parts)
 
         # Use string formatting with pre-computed template
         llm_input = extract_prompt.replace('[Input Text]', original_doc)
         llm_input = llm_input.replace('[Relation List]', rel_list_str)
         llm_input = llm_input.replace('[Questions]', questions)
-        
+        llm_input = llm_input.replace('[Dataset]', dataset_name or 'BioRED')
+
         input_len = len(llm_input)
-            
+
         if previous_outputs is not None and labels is not None:
             output_str = previous_outputs[i]
-        query = {'instruction': '', 'input': llm_input, 'output': output_str if labels is not None else ''}
+        query = {
+            'instruction': '',
+            'input': llm_input,
+            'output': output_str if labels is not None else '',
+            'output_lines': output_lines if labels is not None else [],
+            'output_line_weights': output_line_weights if labels is not None else [],
+        }
         queries.append(query)
 
         if generate_data:
@@ -484,6 +570,7 @@ def construct_llm_input(args, feature, labels = None, generate_data = False, pre
             llm_input = extract_prompt.replace('[Input Text]', output)
             llm_input = llm_input.replace('[Relation List]', rel_list_str)
             llm_input = llm_input.replace('[Questions]', questions)
+            llm_input = llm_input.replace('[Dataset]', dataset_name or 'BioRED')
             
             input_len = len(llm_input)
                 
