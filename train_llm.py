@@ -55,6 +55,10 @@ def parse_arguments():
                         help="Smoothing constant for inverse-sqrt-frequency weights.")
     parser.add_argument("--loss_reweight_max_ratio", type=float, default=10.0,
                         help="Cap max(weight) / min(weight) to this ratio.")
+    parser.add_argument("--prepro_tokenizer_path", default="bert-base-uncased",
+                        type=str, help="Tokenizer for wordpiece entity-span tokenization "
+                             "in prepro. Was previously hardcoded to BiomedBERT; "
+                             "bert-base-uncased works as a fallback if BiomedBERT isn't local.")
 
     parser.add_argument("--seed", type=int, default=66,
                         help="random seed for initialization")
@@ -451,7 +455,7 @@ if __name__ == "__main__":
         if local_rank != -1:
             print(f"DDP enabled: {torch.distributed.get_world_size()} processes, local_rank={local_rank}")
 
-    args.prepro_tokenizer = AutoTokenizer.from_pretrained('../base_models/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext')
+    args.prepro_tokenizer = AutoTokenizer.from_pretrained(args.prepro_tokenizer_path)
     temp_path = os.path.join(os.path.join(args.result_save_path, "checkpoint"))
     if args.is_main_process and not os.path.exists(temp_path):
         os.makedirs(temp_path)

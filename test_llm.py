@@ -29,6 +29,8 @@ def parse_arguments():
                              "than this will be truncated, sequences shorter will be padded.")
 
     parser.add_argument("--model_name_or_path", default="base_models/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext", type=str)
+    parser.add_argument("--prepro_tokenizer_path", default="bert-base-uncased",
+                        type=str, help="Tokenizer for wordpiece entity-span tokenization in prepro.")
 
     # Inference params
     parser.add_argument("--llm_max_new_tokens", default=512, type=int)
@@ -331,7 +333,7 @@ if __name__ == "__main__":
     args.device = device
     set_seed(args)
     args.load_dir = os.path.join(args.result_save_path, 'checkpoint')
-    args.prepro_tokenizer = AutoTokenizer.from_pretrained('../base_models/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext')
+    args.prepro_tokenizer = AutoTokenizer.from_pretrained(args.prepro_tokenizer_path)
     args.max_input_len = 0
     if "docred" in args.data_dir:
         args.dataset = 'docred'
