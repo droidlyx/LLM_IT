@@ -24,6 +24,7 @@ DEV_FILE=${DEV_FILE:-processed_test.pubtator}
 TEST_FILE=${TEST_FILE:-processed_bc8_test.pubtator}
 SEED=${SEED:-66}
 EXTRA_DATASETS=${EXTRA_DATASETS:-drugprot,ddi}
+MAX_SEQ_LENGTH=${MAX_SEQ_LENGTH:-2048}  # 2048 fits 98% BioRED, all DrugProt/DDI, safe at ~22.7GB on 4090
 AUTO_SHUTDOWN=${AUTO_SHUTDOWN:-True}
 RUN_ONLY=${RUN_ONLY:-}  # "" = all; or e.g. "A" / "B" / "B,C" to restrict
 RESULT_ROOT=${RESULT_ROOT:-./results/biored_finetune}
@@ -95,6 +96,7 @@ run_variant() {
     --data_dir $DATA_DIR \
     --model_name_or_path $MODEL_PATH \
     --prepro_tokenizer_path $PREPRO_TOKENIZER_PATH \
+    --max_seq_length $MAX_SEQ_LENGTH \
     --train_file $TRAIN_FILE \
     --dev_file $DEV_FILE \
     --test_file $TEST_FILE \
@@ -114,6 +116,7 @@ run_variant() {
     --data_dir $DATA_DIR \
     --model_name_or_path $MODEL_PATH \
     --prepro_tokenizer_path $PREPRO_TOKENIZER_PATH \
+    --max_seq_length $MAX_SEQ_LENGTH \
     --train_file $TRAIN_FILE \
     --dev_file $DEV_FILE \
     --test_file $TEST_FILE \

@@ -19,6 +19,7 @@ USE_AUGMENTED_TRAINING=False
 USE_EXTRA_TRAINING_DATASETS=False
 LOSS_REWEIGHT=False
 EXTRA_DATASETS="drugprot,ddi"
+MAX_SEQ_LENGTH="${MAX_SEQ_LENGTH:-2048}"  # 2048 fits 98% of BioRED queries; safe on RTX 4090
 RESULT_PATH="${RESULT_PATH:-./results/biored_finetune/llm_no_direction}"
 
 # Set visible GPUs
@@ -41,6 +42,7 @@ train_llm.py \
 --data_dir $DATA_DIR \
 --model_name_or_path $MODEL_PATH \
 --prepro_tokenizer_path $PREPRO_TOKENIZER_PATH \
+--max_seq_length $MAX_SEQ_LENGTH \
 --train_file $TRAIN_FILE \
 --dev_file $DEV_FILE \
 --test_file $TEST_FILE \
@@ -57,6 +59,7 @@ CUDA_VISIBLE_DEVICES=$CUDA_DEVICE python test_llm.py \
 --data_dir $DATA_DIR \
 --model_name_or_path $MODEL_PATH \
 --prepro_tokenizer_path $PREPRO_TOKENIZER_PATH \
+--max_seq_length $MAX_SEQ_LENGTH \
 --train_file $TRAIN_FILE \
 --dev_file $DEV_FILE \
 --test_file $TEST_FILE \
