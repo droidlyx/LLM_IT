@@ -195,7 +195,7 @@ def construct_llm_input(args, prompt, feature, labels = None):
         questions = f'What is the relation {phrase} the following entities?\n'
         for j in range(len(entity_names)):
             if i!=j:
-                ent2 = f'{{{j}|{entity_names[j]}|{_etype(j)}}}'
+                ent2 = f'{{{j}}}'  # compact target ref; name+type already in inline doc
                 output_type = 'None'
                 if (i,j) in rel_dict:
                     for rel in rel_dict[(i,j)]:

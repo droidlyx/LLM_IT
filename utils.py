@@ -504,12 +504,19 @@ def construct_llm_input(args, feature, labels = None, generate_data = False, pre
                 if rel_id != 0:
                     rel_dict.setdefault((h_idx, t_idx), []).append(rel_id - 1)
 
-    # Pre-compute entity strings with canonical type tag: {idx|name|Type}
+    # Entity references:
+    #   - In the inline text (built by feature2text) we keep the full
+    #     {idx|name|type} tag so the model can associate id <-> entity.
+    #   - In the questions we only need the {idx} since name and type are
+    #     already given inline. This saves ~10 tokens per question line.
     def _etype(idx):
         return entity_types[idx] if idx < len(entity_types) else 'Unknown'
-    entity_strings = [f'{{{i}|{entity_names[i]}|{_etype(i)}}}' for i in range(len(entity_names))]
+    entity_strings_full = [f'{{{i}|{entity_names[i]}|{_etype(i)}}}' for i in range(len(entity_names))]
+    entity_strings_short = [f'{{{i}}}' for i in range(len(entity_names))]
 
-    # Pre-compute phrase to avoid conditional in loop
+    # Pre-compute phrase to avoid conditional in loop. Source entity gets the
+    # full marker once (helps the model lock onto which entity is the head);
+    # target entities use the short {i} form.
     phrase_template = 'from {} to' if use_direction else 'between {} and'
 
     label_weights_table = getattr(args, 'label_weights', None) or {}
@@ -517,13 +524,13 @@ def construct_llm_input(args, feature, labels = None, generate_data = False, pre
     for i in range(len(entity_names)):
         output_str_parts = []
         output_line_weights = []   # one float per output line
-        ent1 = entity_strings[i]
+        ent1 = entity_strings_full[i]
         phrase = phrase_template.format(ent1)
         questions_parts = [f'What is the relation {phrase} the following entities?\n']
 
         for j in range(len(entity_names)):
             if i != j:
-                ent2 = entity_strings[j]
+                ent2 = entity_strings_short[j]
                 rel_pair = rel_dict.get((i, j), [])
 
                 if rel_pair:

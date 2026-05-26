@@ -24,12 +24,14 @@ DEV_FILE=${DEV_FILE:-processed_test.pubtator}
 TEST_FILE=${TEST_FILE:-processed_bc8_test.pubtator}
 SEED=${SEED:-66}
 EXTRA_DATASETS=${EXTRA_DATASETS:-drugprot,ddi}
-MAX_SEQ_LENGTH=${MAX_SEQ_LENGTH:-2048}  # 2048 fits 98% BioRED, all DrugProt/DDI, safe at ~22.7GB on 4090
+MAX_SEQ_LENGTH=${MAX_SEQ_LENGTH:-1792}  # 1792 fits all queries after compact prompts (max 1832 BioRED), ~21.9GB peak / +1.6GB headroom
 AUTO_SHUTDOWN=${AUTO_SHUTDOWN:-True}
 RUN_ONLY=${RUN_ONLY:-}  # "" = all; or e.g. "A" / "B" / "B,C" to restrict
 RESULT_ROOT=${RESULT_ROOT:-./results/biored_finetune}
 
 export CUDA_VISIBLE_DEVICES=$CUDA_DEVICE
+# Reduce GPU memory fragmentation — gives +0.8GB headroom at seq=1792
+export PYTORCH_ALLOC_CONF=expandable_segments:True
 NUM_GPUS=$(echo $CUDA_DEVICE | tr ',' '\n' | wc -l)
 
 # --- variant definitions ---

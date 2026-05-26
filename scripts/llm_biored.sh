@@ -19,11 +19,13 @@ USE_AUGMENTED_TRAINING=False
 USE_EXTRA_TRAINING_DATASETS=False
 LOSS_REWEIGHT=False
 EXTRA_DATASETS="drugprot,ddi"
-MAX_SEQ_LENGTH="${MAX_SEQ_LENGTH:-2048}"  # 2048 fits 98% of BioRED queries; safe on RTX 4090
+MAX_SEQ_LENGTH="${MAX_SEQ_LENGTH:-1792}"  # 1792 covers max BioRED query (1832, 0.02% trunc) with ~1.6GB headroom on RTX 4090
 RESULT_PATH="${RESULT_PATH:-./results/biored_finetune/llm_no_direction}"
 
 # Set visible GPUs
 export CUDA_VISIBLE_DEVICES=$CUDA_DEVICE
+# Reduce GPU memory fragmentation — bumps headroom from ~0.9GB to ~1.75GB at seq=1792
+export PYTORCH_ALLOC_CONF=expandable_segments:True
 
 # Count available GPUs
 NUM_GPUS=$(echo $CUDA_DEVICE | tr ',' '\n' | wc -l)
