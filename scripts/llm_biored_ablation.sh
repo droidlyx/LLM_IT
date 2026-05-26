@@ -113,7 +113,7 @@ run_variant() {
     return $train_ec
   fi
 
-  # --- TEST on BioRED dev + BC8 ---
+  # --- TEST on BioRED dev + BC8 (single inference pass produces both full + BioREx-scope F1) ---
   CUDA_VISIBLE_DEVICES=$CUDA_DEVICE python test_llm.py \
     --data_dir $DATA_DIR \
     --model_name_or_path $MODEL_PATH \
@@ -124,6 +124,7 @@ run_variant() {
     --test_file $TEST_FILE \
     --seed $SEED \
     --result_save_path $out_dir \
+    --restrict_to_biorex_pairs \
     --phase 1 2>&1 | tee -a "$logf"
 
   echo "VARIANT $tag finished at $(date '+%Y-%m-%d %H:%M:%S')" | tee -a "$logf"

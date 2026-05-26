@@ -31,6 +31,11 @@ def parse_arguments():
     parser.add_argument("--model_name_or_path", default="base_models/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext", type=str)
     parser.add_argument("--prepro_tokenizer_path", default="bert-base-uncased",
                         type=str, help="Tokenizer for wordpiece entity-span tokenization in prepro.")
+    parser.add_argument("--restrict_to_biorex_pairs", action="store_true",
+                        help="Filter eval to BioREx-compatible pair types only "
+                             "(Chem-Chem, Chem-Disease, Chem-Gene, Disease-Gene, Gene-Gene). "
+                             "Used to compute an apples-to-apples F1 against BioREx 0.60. "
+                             "Without this flag, all pair types are evaluated (full BioRED scope).")
 
     # Inference params
     parser.add_argument("--llm_max_new_tokens", default=512, type=int)
@@ -131,7 +136,38 @@ def llm_batch_inference(queries, temperature = 0.0, use_tqdm = False):
         
     return results
 
-def eval_results(args, entity_names, predicted_rels, labeled_rels, rel_list):
+BIOREX_PAIR_TYPES = {
+    frozenset(['Chemical', 'Chemical']),
+    frozenset(['Chemical', 'Disease']),
+    frozenset(['Chemical', 'Gene']),
+    frozenset(['Disease', 'Gene']),
+    frozenset(['Gene', 'Gene']),
+}
+
+
+def _filter_by_biorex_pairs(rels, entity_types):
+    """Keep only (h, t, rel) tuples whose canonical entity-type pair is in
+    BioREx's evaluated 5-pair-type set. Used to compute an apples-to-apples
+    F1 against BioREx's reported 0.60 (BioRED) / 0.56 (BC8)."""
+    if not entity_types:
+        return rels
+    out = []
+    for tup in rels:
+        h, t = tup[0], tup[1]
+        if h >= len(entity_types) or t >= len(entity_types):
+            continue
+        if frozenset([entity_types[h], entity_types[t]]) in BIOREX_PAIR_TYPES:
+            out.append(tup)
+    return out
+
+
+def eval_results(args, entity_names, predicted_rels, labeled_rels, rel_list,
+                 entity_types=None):
+    # Optional: restrict to BioREx-compatible pair types for direct comparison
+    if getattr(args, 'restrict_to_biorex_pairs', False) and entity_types is not None:
+        predicted_rels = _filter_by_biorex_pairs(predicted_rels, entity_types)
+        labeled_rels = _filter_by_biorex_pairs(labeled_rels, entity_types)
+
     # Convert to sets for comparison
     labeled_set = set(labeled_rels)
     predicted_set = set(predicted_rels)
@@ -231,9 +267,10 @@ def test_model(args, test_features, previous_outputs = None, eval = True, save_n
         return model_outputs
 
     print(all_outputs[0] + '\n')
-    all_tp = 0
-    all_fp = 0
-    all_fn = 0
+    # Accumulators for both eval scopes. We compute the unrestricted (full) F1
+    # and the BioREx-restricted F1 in a single inference pass.
+    all_tp = 0; all_fp = 0; all_fn = 0
+    biorex_tp = 0; biorex_fp = 0; biorex_fn = 0
     all_results = ""
     batch_cnt = 0
     for batch in tqdm(dataloader, total = len(dataloader)):
@@ -301,26 +338,51 @@ def test_model(args, test_features, previous_outputs = None, eval = True, save_n
                     if not args.use_direction:
                         labeled_rels.append((t_idx, h_idx, rel_id))
 
-        result_string, (tp,fp,fn,f_score) = eval_results(args, entity_names, predicted_rels, labeled_rels, feature['rel_list'][0])
-        all_tp += tp
-        all_fp += fp
-        all_fn += fn
+        # 1) Full scope F1 (all pair types). Always computed for transparency.
+        full_args = argparse.Namespace(**vars(args))
+        full_args.restrict_to_biorex_pairs = False
+        result_string, (tp, fp, fn, f_score) = eval_results(
+            full_args, entity_names, predicted_rels, labeled_rels,
+            feature['rel_list'][0], entity_types=ent_types_doc,
+        )
+        all_tp += tp; all_fp += fp; all_fn += fn
+
+        # 2) BioREx-restricted scope (5 pair types only). Always computed in
+        # parallel so a single inference pass yields both numbers.
+        bx_args = argparse.Namespace(**vars(args))
+        bx_args.restrict_to_biorex_pairs = True
+        _, (btp, bfp, bfn, _bf) = eval_results(
+            bx_args, entity_names, predicted_rels, labeled_rels,
+            feature['rel_list'][0], entity_types=ent_types_doc,
+        )
+        biorex_tp += btp; biorex_fp += bfp; biorex_fn += bfn
+
         all_results += original_doc + '\n\n' + result_string + '\n____________________________________________________\n'
 
-    final_precision = all_tp / (all_tp + all_fp + 1e-8)
-    final_recall = all_tp / (all_tp + all_fn + 1e-8)
-    final_f1 = 2 * final_precision * final_recall / (final_precision + final_recall + 1e-8)
-    print('final precision:', final_precision)
-    print('final recall:', final_recall)
-    print('final f1:', final_f1) 
+    def _prf(tp, fp, fn):
+        p = tp / (tp + fp + 1e-8)
+        r = tp / (tp + fn + 1e-8)
+        return p, r, 2 * p * r / (p + r + 1e-8)
+
+    final_precision, final_recall, final_f1 = _prf(all_tp, all_fp, all_fn)
+    bx_p, bx_r, bx_f1 = _prf(biorex_tp, biorex_fp, biorex_fn)
+    print(f'final precision (FULL):   {final_precision:.4f}')
+    print(f'final recall    (FULL):   {final_recall:.4f}')
+    print(f'final f1        (FULL):   {final_f1:.4f}')
+    print(f'final precision (BIOREX): {bx_p:.4f}   <- 5 pair types only, comparable to BioREx 0.60/0.56')
+    print(f'final recall    (BIOREX): {bx_r:.4f}')
+    print(f'final f1        (BIOREX): {bx_f1:.4f}')
 
     if save_name is not None:
         f = open(os.path.join(args.result_save_path, save_name), 'w')
         f.write(f'final precision:{final_precision}\n')
         f.write(f'final recall:{final_recall}\n')
         f.write(f'final f1:{final_f1}\n')
+        f.write(f'biorex_scope precision:{bx_p}\n')
+        f.write(f'biorex_scope recall:{bx_r}\n')
+        f.write(f'biorex_scope f1:{bx_f1}\n')
         f.write(all_results)
-        f.close() 
+        f.close()
 
     return model_outputs
 
