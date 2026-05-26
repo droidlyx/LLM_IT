@@ -366,20 +366,23 @@ def finetune_llm(args, train_features, continue_training = False, previous_outpu
         return batch
 
     class _WeightedTrainer(Trainer):
-        """Trainer that uses per-token loss weights when batch contains them.
-
-        For samples without explicit weights (loss_weights all zeros on output
-        tokens, which can't happen here, or absent entirely), falls back to
-        standard mean CE so behavior matches the unweighted baseline.
+        """Trainer that always pops loss_weights from inputs (so model.forward
+        doesn't see an unexpected kwarg) and uses per-token weighted CE when
+        reweighting is enabled. Otherwise falls back to standard CE so the
+        no-reweight baseline behaves exactly like the original Trainer.
         """
+        def __init__(self, *a, apply_loss_weights=False, **kw):
+            super().__init__(*a, **kw)
+            self.apply_loss_weights = apply_loss_weights
+
         def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
             loss_weights = inputs.pop('loss_weights', None)
             labels = inputs.get('labels')
             outputs = model(**inputs)
-            logits = outputs.logits
-            if loss_weights is None or labels is None:
+            if (not self.apply_loss_weights) or loss_weights is None or labels is None:
                 loss = outputs.loss
                 return (loss, outputs) if return_outputs else loss
+            logits = outputs.logits
             # Shift for causal LM: predict tok t+1 from tok t.
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -390,8 +393,7 @@ def finetune_llm(args, train_features, continue_training = False, previous_outpu
                 shift_labels.view(-1),
             )  # shape: (B*T,)
             w = shift_weights.view(-1)
-            # only token positions with label != -100 contribute (loss_fct already
-            # zeros them via reduction='none', but the weight mask also handles it)
+            # only token positions with label != -100 contribute
             mask = (shift_labels.view(-1) != -100).float()
             ce = ce * mask
             weighted_ce = ce * w
@@ -399,12 +401,12 @@ def finetune_llm(args, train_features, continue_training = False, previous_outpu
             loss = weighted_ce.sum() / denom
             return (loss, outputs) if return_outputs else loss
 
-    trainer_cls = _WeightedTrainer if args.loss_reweight else Trainer
-    trainer = trainer_cls(
+    trainer = _WeightedTrainer(
         model=model,
         args=training_args,
         train_dataset = train_dataset,
         data_collator=_sft_data_collator,
+        apply_loss_weights=bool(args.loss_reweight),
     )
 
     trainer.model_accepts_loss_kwargs = False

@@ -304,6 +304,9 @@ def test_model(args, test_features, save_name = 'all_results.txt'):
                     'attention_mask': batch[1].to(args.device),
                     'entity_pos': batch[3],
                     'hts': batch[4],
+                    'rel_list': batch[5],
+                    'dataset_name': batch[6],
+                    'entity_types': batch[7],
                     })
         queries = construct_llm_input(args, args.extract_prompt, feature, labels = None)
         all_queries.extend(queries)
@@ -315,7 +318,7 @@ def test_model(args, test_features, save_name = 'all_results.txt'):
             queries = construct_llm_input(args, args.extract_prompt, feature, labels = None)
             all_queries.extend(queries)
             all_indexes.extend([(batch_cnt,i) for i in range(len(queries))])
-        
+
     print('Total number of queries: ', len(all_queries))
     all_outputs = llm_batch_inference(all_queries, use_tqdm = True)
     for output in all_outputs[:10]:
@@ -332,9 +335,13 @@ def test_model(args, test_features, save_name = 'all_results.txt'):
                     'attention_mask': batch[1].to(args.device),
                     'entity_pos': batch[3],
                     'hts': batch[4],
+                    'rel_list': batch[5],
+                    'dataset_name': batch[6],
+                    'entity_types': batch[7],
                     }
         labels = batch[2][0]
-        original_doc, entity_names = feature2text(args, feature['input_ids'][0], feature['entity_pos'][0], aug_rate = 0)
+        ent_types_doc = feature['entity_types'][0] if feature.get('entity_types') else None
+        original_doc, entity_names = feature2text(args, feature['input_ids'][0], feature['entity_pos'][0], aug_rate = 0, entity_types = ent_types_doc)
         predicted_rels = []
         doc_outputs = {i:[] for i in range(len(entity_names))}
         for output,index in zip(all_outputs, all_indexes):
