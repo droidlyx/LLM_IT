@@ -21,15 +21,28 @@
 
 ## 1. 当前 BioRE 任务的关键性能数字
 
-| 系统 / 数据集 | F1 | 备注 |
-|---|---|---|
-| Llama-3.1-8B SFT (LLM_IT baseline) on BioRED dev | **0.69** | Pair-wise enumeration prompt,user 的当前 baseline |
-| 同模型在 BC8 test | **0.52** | OOD,差 16 pt |
-| 同模型在 BioRED + 方向 | -0.10 左右 | 加方向更难 |
-| BioREx (38K 跨数据集监督) on BioRED | **0.796** | 当前公认 SOTA / 上限 |
-| BioRED IAA 上限 | **0.79–0.85** | 原论文报告 |
+**两种不同 BioRED 评估口径**(直接对比之前要先对齐):
 
-**关键观察**: 0.65–0.69 是各种方法都难以突破的瓶颈,IAA 上限只比 0.69 高约 15 个点。说明剩余 gap 中很大一部分是 **annotation-level noise / inconsistency**,不是模型容量问题。
+| 口径 | 评估范围 | 用法 |
+|---|---|---|
+| **Relaxed (9-class)** | predict ∈ {8 BioRED relations, None};**无 novelty,无 direction** | BioREx / REaMA / 我们的 baseline 都用这个 |
+| **Complete (BioRED 官方 scorer)** | 上面 + **novelty(Novel/No)** + (无 direction,因 BioRED 原数据无) | BioRED 原论文用这个,数字明显更低 |
+
+| 系统 | 评估口径 | BioRED F1 | 备注 |
+|---|---|---|---|
+| **BioREx**(PubMedBERT + 8 datasets,Lai 2023) | relaxed 9-class | **79.6** | BERT 路线 SOTA。论文 §3.4 明说"classify into RE type or None",**不预测 novelty** |
+| **REaMA-2-13B**(Zhang 2025, IEEE TNNLS) | relaxed 9-class | **~68** | LLaMA-2 IFT,多数据集训练。81.28 是 7 个数据集**平均**,BioRED 单算 ~68 |
+| **Llama-3.1-8B SFT (LLM_IT baseline)** | relaxed | **0.69** | pair-enumeration prompt,跟 REaMA 同档次 |
+| 同模型 BC8 test | relaxed | **0.52** | OOD 跌 16 点 |
+| 同模型 + direction | relaxed + dir | **-0.10** | 加方向更难 |
+| BioRED 原论文 prior SOTA | **complete (含 novelty)** | **65.17** | REaMA 论文引此为对照,跟 BioREx 79.6 不可直接比 |
+| BioRED IAA 上限 | complete | **0.79–0.85** | 原论文报告 |
+
+**关键修正**:
+- **BioREx 79.6 ≠ complete RE**,是 relaxed 9-class(无 novelty),所以"79.6"与 BioRED 官方 65.17 之间隔了一个评估口径,不是真"差 14 点"
+- **REaMA-2-13B 在 BioRED 单测 ~68**,跟我们 8B baseline 0.69 几乎平齐 —— **LLM-IFT 路线现状是 ~0.68-0.69,REaMA 没有真正"突破"BioRED**;它的 81.28 平均是被 HPRD50/AIMed 这种小数据集拉高的
+- 真正的研究 gap:**LLM-IFT 路线 ~0.69 vs BERT 路线 0.796**(同口径)= 10 个点。这一部分既有架构差异(BERT 对短文本天然占优),也有训练范式差异(BERT classification head vs LLM next-token)
+- 0.69 → 0.85(IAA)的 16 个点**不能简单当 headroom**,因为前 10 点是架构差异,后 ~7 点才是"标注一致性 / commitment 模糊性"等真正可攻克的研究瓶颈
 
 ---
 
@@ -114,9 +127,10 @@
 
 ### 3.1 当前主流范式(2023-2026)
 
-**生物医学 RE 仍以 fine-tuned encoder 为 SOTA**:
-- BioBERT / PubMedBERT / SciBERT + classification head
-- **BioREx (arXiv:2306.11189)** 是公认上限: 跨多个 BioRE 数据集 schema harmonization,38K 监督,BioRED F1 = 0.796
+**生物医学 RE 主流范式**:
+- BioBERT / PubMedBERT / SciBERT + classification head(BERT 路线)
+- **BioREx (arXiv:2306.11189)**: PubMedBERT + 8 数据集 harmonize,BioRED relaxed F1 = **0.796**(无 novelty;BioRED 原论文 complete-RE prior SOTA = 0.6517)
+- **REaMA (IEEE TNNLS 2025, Zhang et al.)**: LLaMA-2 7B/13B + 150K instruction tuning (REInstruct),**BioRED 单测 ~0.68**,LLM-IFT 路线代表;81.28 是 7 数据集平均(被 HPRD50/AIMed 拉高)
 
 **通用 RE 三条并行**:
 - Generative RE(REBEL / GenIE / TplinkerPlus)— T5 seq2seq
@@ -147,11 +161,21 @@
 - **跟你方向的差异**: 他们的 "directionality" 是角色(subject/object),**不是 commitment strength**。你做的"机理 vs 统计"维度跟它正交,可同时叠加
 - **数据**: bioredirect 文件就是这篇的产物,直接可用
 
-#### (c) **BioREx**(arXiv:2306.11189,2023-06,21 citations,user 的 baseline 上限)
-- 跨数据集 schema alignment + harmonized training
-- BioRED F1 从 74.4 → 79.6
-- **跟你方向的差异**: 它只 align 不同数据集的 schema,假设每个数据集自己的 label 是对的;你想 question 单数据集内的 label 一致性
-- **数据**: 已开源 (github.com/ncbi/BioREx)
+#### (c) **BioREx**(arXiv:2306.11189,2023-06,21 citations,**BERT 路线 SOTA**)
+- 跨数据集 schema alignment + harmonized training,PubMedBERT
+- BioRED **relaxed 9-class F1 = 79.6**(从 74.4 提升;论文 §3.4 明说 "classify into RE type or None",**不预测 novelty**)
+- 5 个 harmonization tricks(详见 RESEARCH_NOTES 末尾 BioREx tricks 段)
+- **跟你方向的差异**: align schemas 但不 question 单数据集内的 label 一致性
+- **数据 & 代码**: github.com/ncbi/BioREx
+
+#### (c2) **REaMA**(IEEE TNNLS 2025,Zhang et al,Sichuan U)
+- LLaMA-2 7B/13B + IT on **REInstruct**(150K instructions, 8 datasets)
+- BioRED **单测 ~0.68**,7 数据集平均 81.28(被小数据集拉高)
+- 两种 instruction template(命名实体 vs 仅类型),`@DiseaseSrc$...@/DiseaseSrc$` 边界标签
+- 11:1 None:non-None 不平衡用 V1 子集平衡采样解决(我们用 `--loss_reweight` 反频权)
+- CoT 子集(GPT-4 生成 reasoning)显著提升 OOD 泛化
+- **跟你方向的差异**: 现成的 multi-dataset IFT 蓝本,但**没有 mechanism-aware labels**、**没有 [Dataset] 显式 token**、**用 full FT 不是 LoRA**
+- **代码**: github.com/stzpp/REaMA
 
 #### (d) **Beyond the Numbers**(arXiv:2411.05224,2024-11,2 citations)
 "Transparency in Relation Extraction Benchmark Creation and Leaderboards"
@@ -207,20 +231,28 @@
 
 ### 3.5 文献 landscape 表
 
-| 工作 | 角度 | 跟你 Ch 3 关系 |
-|---|---|---|
-| BioREx | 跨数据集 schema alignment | 直接 baseline / 上限 |
-| BioREDirect | 加 subject/object 方向 | 正交维度,可叠加 |
-| R1-RE | RL teach guidelines | OOD generalization 同目标,可对比 |
-| InstructUIE / UIE | 统一 IE 多任务 | 通用方法,非 biomed-specific |
-| BioNCERE | 非对比学习 | 训练方法,可借鉴 |
-| **Causal Language paper** | **causal classifier 工具** | **building block** |
-| **UnScientify** | **uncertainty 检测工具** | **building block** |
-| GUT-BRAINIE | M-RE vs C-RE 概念 | 引用作为 motivation |
-| Beyond the Numbers | RE benchmark critique | framing 模板(但你做 method 不只 critique) |
-| Revisiting DocRED / Re-TACRED | dataset re-annotation | 不走这条路 |
+| 工作 | 路线 | BioRED F1(relaxed) | 跟你 Ch 3 关系 |
+|---|---|---|---|
+| **BioREx** | BERT + 8-data harmonize | **0.796** | BERT 路线 SOTA,差架构 |
+| **REaMA** | LLaMA-2 IFT + 8 数据集 | ~0.68 | LLM-IFT 路线 SOTA,**你已 持平**(0.69) |
+| **你的 8B baseline** | LLaMA-3.1 IFT + BioRED only | **0.69** | LLM-IFT 路线起点 |
+| BioREDirect | BERT + subject/object 方向 | (不同口径) | 正交维度,可叠加 |
+| R1-RE | RL teach guidelines | (通用 RE,不在 biomed) | OOD generalization 同目标,可对比 |
+| InstructUIE / UIE | 统一 IE 多任务 | (通用 RE) | 通用方法,非 biomed-specific |
+| BioNCERE | 非对比学习 | (BioRE 不主流) | 训练方法,可借鉴 |
+| **Causal Language paper** | **causal classifier 工具** | — | **building block** |
+| **UnScientify** | **uncertainty 检测工具** | — | **building block** |
+| GUT-BRAINIE | M-RE vs C-RE 概念 | (新 benchmark) | 引用作为 motivation |
+| Beyond the Numbers | RE benchmark critique(position) | — | framing 模板(但你做 method 不只 critique) |
+| Revisiting DocRED / Re-TACRED | dataset re-annotation | — | 不走这条路 |
 
-**关键判断**: 截至 2026-05,**没人对 BioRED 做过 TACRED-Revisited 等级的实证 critique**;**没人把 causal classifier(2502.12159)接进 RE pipeline**;**没人把 commitment-strength 维度作为 BioRE 的辅助标签**。这三块是真空地带。
+**关键判断**(2026-05):
+- **LLM-IFT 路线 BioRED 天花板 ~0.68-0.69**,REaMA 没真正突破;BioREx 0.796 是 BERT 路线优势,不是 LLM-IFT 还差 10 个点的"目标"
+- **真正的 LLM-IFT 上升空间 = 0.69 → 0.79+**(追平 BERT 路线 SOTA),约 10 个点,这是 Ch 3 可挑战的指标
+- **没人对 BioRED 做过 TACRED-Revisited 等级的实证 critique**
+- **没人把 causal classifier(2502.12159)接进 RE pipeline**
+- **没人把 commitment-strength 维度作为 BioRE 的辅助标签**
+- **没人系统对比 LLM-IFT vs BERT 路线的能力上限差异原因**
 
 ---
 
