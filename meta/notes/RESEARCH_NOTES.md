@@ -38,22 +38,28 @@ if to_binary:
 
 ### 修正后的真实横向对照(全部口径 B = 多类无 novelty 无 direction)
 
-| 系统 | 路线 | **BioRED dev** | **BC8 test (OOD)** | OOD 跌幅 |
-|---|---|---|---|---|
-| **BioREx**(PubMedBERT + 8 datasets) | BERT | **0.60** | **0.56** | **-0.04** |
-| **REaMA-2-13B**(LLaMA-2 IFT)(BioRED 单测) | LLM-IFT | **~0.68** | — | — |
-| **你的 8B SFT (LLM_IT)** | LLM-IFT | **0.69** | **0.52** | **-0.17** |
-| 同 8B + direction | LLM-IFT | -0.10 | — | — |
-| BioREx **binary**(论文报的 79.6) | BERT | 0.796 | — | (口径 A, 不可比) |
-| BioRED 原论文 prior SOTA(complete + novelty) | BERT 系 | 0.6517 | — | (口径 C, 不可比) |
-| BioRED IAA 上限 | 人 | 0.79–0.85 | — | (口径 C) |
+**关键 sub-scope 区别**:BioREx eval 排除了 Variant/Organism/CellLine 涉及的 pair(只保留 5 个 pair type),REaMA / 我们的 eval 包含所有 pair type:
+- BioRED dev 里 ~17% gold 关系是 Disease-Variant / Chem-Variant 等 → 被 BioREx 排除
+- BC8 里 ~19.5% gold 关系被 BioREx 排除(主要 Disease-Variant 1950 条 / 12061 条)
+- 所以"BioREx 0.60"是在 BioRED 的 ~83% 子集上;"REaMA 0.68 / 我们 0.69"是在 100% pair 上
+
+| 系统 | 路线 | Eval scope | **BioRED dev** | **BC8 test (OOD)** | OOD 跌幅 |
+|---|---|---|---|---|---|
+| **BioREx**(PubMedBERT + 8 datasets) | BERT | **5 pair types only** | **0.60** | **0.56** | **-0.04** |
+| **REaMA-2-13B**(LLaMA-2 IFT) | LLM-IFT | **all pair types** | **~0.68** | — | — |
+| **你的 8B SFT (FULL)** | LLM-IFT | **all pair types** | **0.69** | **0.52** | **-0.17** |
+| 你的 8B SFT(BIOREX scope) | LLM-IFT | 5 pair types | (跑完得) | (跑完得) | — |
+| 同 8B + direction | LLM-IFT | all | -0.10 左右 | — | — |
+| BioREx **binary**(论文报的 79.6) | BERT | 5 pair types, binary | 0.796 | — | (口径 A) |
+| BioRED 原论文 prior SOTA | BERT | 完整含 novelty | 0.6517 | — | (口径 C) |
+| BioRED IAA 上限 | 人 | 完整 | 0.79–0.85 | — | (口径 C) |
 
 **关键发现(cross-pattern)**:
-- **In-distribution(BioRED)上 LLM 完胜 BERT**:0.69 vs 0.60,**+9 个点**
-- **OOD(BC8)上 BERT 反超 LLM**:0.56 vs 0.52,**+4 个点**
-- **OOD 鲁棒性**:BERT 跌 0.04,**LLM 跌 0.17,是 BERT 的 4 倍**
-- 这说明 LLM-IFT 在 in-distribution 过拟合标注 convention,跨 corpus 时崩盘
-- BERT 因为参数少 + classification head + cross-dataset 训练数据多样,反而更鲁棒
+- **In-distribution(BioRED)上**:LLM 0.69(all pair)vs BioREx 0.60(5 pair)—— **注意 scope 不同,要等我们 BIOREX-restricted 数字才知道真实差距**
+- **OOD(BC8)上**:BioREx 0.56(5 pair)vs LLM 0.52(all pair)—— 同样 scope 不一致
+- **同 scope 横比**:REaMA 0.68(all pair)≈ 我们 0.69(all pair) → LLM-IFT 路线已饱和,堆数据/规模无效
+- **OOD 鲁棒性**:BERT 跌 0.04(5-pair 域内),LLM 跌 0.17(all-pair 域内),**但 scope 不同需要谨慎读**
+- 等 `--restrict_to_biorex_pairs` 跑完后我们才能给出真实的同 scope 对比
 
 **这彻底改写 Ch 3 framing**:
 - 之前的"追平 BERT SOTA"是基于 BioREx 79.6 的错误对照
