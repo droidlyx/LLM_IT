@@ -16,10 +16,12 @@ set -e
 cd "$(dirname "$0")/.."
 
 VARIANT_DIR=${VARIANT_DIR:-results/biored_finetune/D/checkpoint}
-MODEL_PATH=${MODEL_PATH:-base_models/Qwen3-8B-Base}
+MODEL_PATH=${MODEL_PATH:-/root/gpufree-data/Qwen3-8B-Base}
 OUT_DIR=${OUT_DIR:-posthoc/results}
-DATA_DIR=${DATA_DIR:-./dataset/Biomedical/processed}
-OOD_FILES="./dataset/Biomedical/cdr.pubtator,./dataset/Biomedical/disgenet.pubtator,./dataset/Biomedical/pharmgkb.pubtator"
+DATA_DIR=${DATA_DIR:-./dataset/biored}
+DEV_FILE=${DEV_FILE:-processed_test.pubtator}
+TEST_FILE=${TEST_FILE:-processed_bc8_test.pubtator}
+OOD_FILES="./dataset/Biomedical/processed/cdr.pubtator,./dataset/Biomedical/processed/disgenet.pubtator,./dataset/Biomedical/processed/pharmgkb.pubtator"
 
 mkdir -p "$OUT_DIR"
 
@@ -40,11 +42,12 @@ if [ "$MODE" != "eval_only" ]; then
   EXTRA_ARGS=""
   [ "$LIMIT_DOCS" -gt 0 ] && EXTRA_ARGS="--limit_docs $LIMIT_DOCS"
 
-  # Dev + test (BioRED)
+  # Dev + test (BioRED native — variant D was trained on processed_train_dev,
+  # so DEV_FILE=processed_test (held-out BioRED) and TEST_FILE=BC8 BioRED-test)
   python posthoc/score_pairs.py \
     --data_dir "$DATA_DIR" \
-    --dev_file processed_train_dev.json \
-    --test_file processed_test.json \
+    --dev_file "$DEV_FILE" \
+    --test_file "$TEST_FILE" \
     --model_name_or_path "$MODEL_PATH" \
     --variant_dir "$VARIANT_DIR" \
     --output_dir "$OUT_DIR" \

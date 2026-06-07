@@ -4,3 +4,6 @@
 base_models/
 dataset/
 results/
+posthoc/results/
+posthoc/results_synthetic/
+posthoc/logs/

@@ -31,9 +31,9 @@ from utils import feature2text, set_seed
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--data_dir", default="./dataset/Biomedical/processed")
-    p.add_argument("--dev_file", default="processed_train_dev.json")
-    p.add_argument("--test_file", default="processed_test.json")
+    p.add_argument("--data_dir", default="./dataset/biored")
+    p.add_argument("--dev_file", default="processed_test.pubtator")
+    p.add_argument("--test_file", default="processed_bc8_test.pubtator")
     p.add_argument("--ood_test_files", default="",
                    help="Comma-separated pubtator paths for OOD eval (cdr / disgenet / pharmgkb).")
     p.add_argument("--model_name_or_path",
@@ -157,11 +157,10 @@ def score_jobs(args, jobs):
     if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    n_gpu = max(1, torch.cuda.device_count())
     llm = LLM(
         model=args.model_name_or_path,
         dtype='bfloat16',
-        tensor_parallel_size=n_gpu,
+        tensor_parallel_size=1,
         trust_remote_code=True,
         enable_lora=True,
         max_model_len=int(args.max_seq_length) + 64,
@@ -233,9 +232,9 @@ def score_jobs(args, jobs):
 
 def main():
     args = parse_args()
-    set_seed(args)
     args.n_gpu = torch.cuda.device_count()
     args.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    set_seed(args)
 
     if "docred" in args.data_dir.lower():
         args.dataset = 'docred'
@@ -318,4 +317,7 @@ def main():
 
 
 if __name__ == '__main__':
+    import multiprocessing as mp
+    mp.set_start_method('spawn', force=True)
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
     main()
