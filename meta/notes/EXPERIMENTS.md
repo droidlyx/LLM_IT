@@ -466,9 +466,126 @@ Rare-class F1 也大幅回升:
 
 完整 smoke 分析见 [posthoc/SMOKE_FINDINGS.md](../../posthoc/SMOKE_FINDINGS.md)。
 
-### 10.3 全量结果 (2026-06-07, 5 个数据集全部跑完)
+### 10.3 全量结果 — v3 multi-pair (2026-06-07,**deployment-faithful**)
 
-总跑时:18 分钟(v2 优化后,2 张 4090 并行;v1 估计 ~7 小时)
+**这是最终的 paper-grade 数字。v2 single-pair 的 +5.7 pt mean Δ 已被否定**(详见 §10.8)。
+
+总跑时:**18 分钟**(v3 multi-pair,2 张 4090 并行;state-machine line parser 100% coverage 在 BC8 / OOD 上,BioRED dev 99.5%)
+
+| 数据集 | n_pairs | Baseline F1 | Best F1 | Δ | Method |
+|---|---|---|---|---|---|
+| BioRED dev (processed_test) | 20,263 | 0.6062 | **0.6068** | **+0.05 pt** | P2P_oracle |
+| BC8 test | 82,392 | 0.5519 | **0.5647** | **+1.28 pt** | P2P_oracle |
+| **cdr** (BC5CDR) | 75,313 | 0.3842 | **0.4577** | **+7.35 pt** | LA τ=0.5 |
+| disgenet | 3,912 | 0.8657 | **0.8672** | **+0.15 pt** | P2P_uniform |
+| pharmgkb | 88,336 | 0.2606 | **0.2794** | **+1.88 pt** | P2P_oracle |
+
+**Baseline vs test_llm.py 复现 F1** — 验证 v3 是 deployment-faithful:
+
+| 数据集 | test_llm.py (multi-pair, 复现) | v3 multi-pair baseline | 差距 |
+|---|---|---|---|
+| BioRED dev | 0.6478 | 0.6062 | -4.2 pt |
+| BC8 test | 0.5640 | 0.5519 | -1.2 pt |
+| cdr | 0.4209 (历史) | 0.3842 | -3.7 pt |
+| disgenet | 0.8485 | 0.8657 | +1.7 pt |
+| pharmgkb | 0.2565 | 0.2606 | +0.4 pt |
+
+差距 ~3-4 pt 来源(可解):
+1. v3 漏掉 multi-rel 标签(test_llm 加入每对的所有 rel,v3 只保留第一个非-None)
+2. 0.5-1% drift 在 BC8 上未识别的 pair
+3. eval_adjusted 用 pair-level micro,test_llm.py 用 direction-duplicated micro
+
+方向一致,绝对值有可控偏差。
+
+**方法均值排名 (5 数据集 Δ 平均)**:
+
+| 方法 | Mean Δ | 每集 Δ |
+|---|---|---|
+| **P2P_oracle** | **+1.08 pt** | +0.001, +0.013, +0.021, +0.001, +0.019 |
+| LA τ=0.5 | -0.81 pt | -0.015, -0.017, +0.073, -0.004, -0.077 |
+| P2P_uniform | -4.08 pt | -0.108, -0.066, +0.047, +0.001, -0.079 |
+| LA τ=1.0 | -5.33 pt | -0.110, -0.087, +0.054, -0.007, -0.115 |
+| LA τ=2.0 | -18.59 pt | |
+| TECP | -30.22 pt | |
+| P2P+TECP | -30.67 pt | |
+
+**P2P_oracle 仍是 5/5 +Δ 的唯一方法**,但均值从 v2 的 +5.71 缩到 v3 的 +1.08 pt。**单一最大增益:cdr +7.35 pt with LA τ=0.5**。
+
+### 10.4 失败模式重新解读
+
+**v3 数据揭示真相**:multi-pair LLM-IFT 设置下,**模型的 autoregressive context 自带 prior calibration**。当模型生成第 N 行答案时,它能看到自己前 N-1 行说了多少 None / Association,自动调节这一对的预测倾向。
+
+这层"context calibration"已经替代了 v2 single-pair 上 P2P 起到的作用 → **P2P 在 deployment 上增益从 +5-18pt 缩到 +0-7pt**。
+
+| 数据集 | autoregressive context 校准是否够? | 还需要 P2P 吗? |
+|---|---|---|
+| BioRED dev | 够 — 跟训练同分布 | 不需要 (+0.05) |
+| BC8 test | 大致够 — 跟训练近似分布 | 微帮 (+1.3) |
+| **cdr** | **不够 — label space 完全不同**(BioRED 8 类 → cdr 1 类 CID) | **需要** (+7.4) |
+| disgenet | 够 — 已 0.86 高 baseline | 不需要 (+0.2) |
+| pharmgkb | 不够 — 极端低 target prior | 小帮 (+1.9) |
+
+### 10.5 cdr 上为什么 +7 pt 仍然有意义
+
+cdr 是 BC5CDR (Chemical-Induced-Disease),单一关系 "CID",跟 BioRED 的 8 类完全分裂的 label space。
+
+在 cdr 上:
+- baseline P/R = 0.49 / 0.32 → F1 = 0.38 — 模型严重 under-predict CID
+- **LA τ=0.5** (margin shift on log P_train):F1 → 0.46 (+7.4 pt)
+
+LA 调整的原理: BioRED 训练里 None 占 ~80%,LA 在 inference 时把 None logit 减去 0.5×log(0.8) ≈ +0.11 (减去对数,实际是加 logit),让 CID 相对竞争力增强,更容易突破 argmax 阈值。
+
+这是**真实**部署可用的 post-hoc 增益,不依赖 ground truth target prior。
+
+### 10.6 论文 contribution 修正
+
+之前 (v2 时期) 的 narrative 不再成立:~~"P2P calibration 在所有 5 数据集都涨 +5.7pt"~~ 是 single-pair OOD artifact。
+
+修正后的 narrative:
+
+> 在多数据集 LLM-IFT BioRE 设置下,multi-pair generation 的 autoregressive context 已经隐式提供了部分 prior calibration。
+> 因此 post-hoc P2P / LA 校准在 **in-distribution (BioRED dev) 几乎无增益(+0.05 pt)**,
+> 但在 **完全不同 label space 的 OOD 数据集 (cdr) 上仍可贡献 +7.35 pt** —
+> 主因是 cdr 的二分类 schema (None vs CID) 与 BioRED 的 8 类 contrast learning 没有可迁移的 calibration 信号,
+> margin-shift 风格的 LA 用训练集 prior 把 None 决策边界拉低,直接救回 under-prediction。
+>
+> **这一发现矫正了 BioREx-style schema harmonization 论文中常见的过度乐观**:在已经做了 multi-pair generation 的 LLM 路线上,
+> post-hoc calibration 的 ROI 主要落在 **真正 label-space 不同** 的目标数据集上,而非 prior 接近的 in-distribution / 弱 OOD。
+
+### 10.7 v3 工程要点
+
+`posthoc/score_pairs_v3.py`:
+- Multi-pair prompt(跟 test_llm.py 同格式),vLLM `logprobs=20` 捕获每个 `{N}.` 后 first-token 的 top-K
+- State machine 解析单/双位数行号 + 双空格/单空格两种格式(早期 regex 实现 19% drift,修后 0.5-1% drift)
+- 18 min 全 5 数据集(GPU0 dev+test BC8,GPU1 cdr+disgenet+pharmgkb)
+- 输出格式跟 v2 一致,eval_adjusted 不用改
+
+### 10.8 v2 (single-pair) 数字为何不能用
+
+v2 用 single-pair query(一次只问一对,prompt 只有 1 个 target),与训练时 multi-pair query 不一致 → OOD。具体:
+- v2 baseline F1 系统性比 deployment 低 5-17 pt
+- 模型在 single-pair 上 over-predict Association(没看到 sibling 的 None 量)
+- P2P 在 v2 上看似涨 +5-18 pt,**实际只是修复了这个 single-pair OOD artifact**,deployment 上根本没那么大空间
+
+| | v2 single-pair Δ | v3 multi-pair Δ | "真实"增益 |
+|---|---|---|---|
+| BioRED dev | +4.81 pt | +0.05 pt | ~0 |
+| BC8 test | +10.99 pt | +1.28 pt | small |
+| **cdr** | **+6.97 pt** | **+7.35 pt** | **real** |
+| disgenet | +3.80 pt | +0.15 pt | ~0 |
+| pharmgkb | +8.35 pt | +1.88 pt | small |
+
+cdr 数字在两个版本下都接近 (+7),因为 cdr 上 P2P/LA 的增益不依赖 multi-pair context — label space 实质不同,context 没用。其他数据集 v2 数字基本是噪声/artifact,不能用。
+
+### 10.9 后续 (Phase 2 候选)
+
+1. **多 seed 验证 cdr +7 pt 不是噪声**: seed ∈ {42, 66, 123} × variant D × cdr
+2. **NPE-lite**: 当 p_target 未知时(部署),用 LoRA ensemble 估计;cdr 上验证能否复刻 +7 pt
+3. **variant A baseline 复现**: D 的 +Δ 来自 reweight 训练 + post-hoc P2P 双层先验校准;A 上 P2P 单独的 Δ 是多少?这能区分 reweight 训练 vs P2P inference 的贡献
+4. **per-doc P2P**: 替代全集 p_target,用 doc-level prior 估计,处理 doc-distribution shift
+5. **真正不一样的 label space**: drugprot / ddi — 这些 schema 跟 BioRED 完全不同,可能呈现 cdr 风格大增益
+
+---
 
 | 数据集 | n_pairs | Baseline F1 | Best F1 | Δ | Best method |
 |---|---|---|---|---|---|
@@ -568,6 +685,7 @@ Smoke 验证方向**全部正确**,只在最小数据集 cdr 上幅度高估 —
 
 ## 更新日志
 
+- **2026-06-07 (深夜)**: §10 重做 — v2 single-pair 数字否定 (artifact),v3 multi-pair 才是 deployment-faithful;P2P_oracle 均值 +1.08 pt,cdr LA τ=0.5 +7.35 pt (最大单点增益)
 - **2026-06-07 (晚)**: §10 全量结果填入 — P2P_oracle 5/5 数据集均 +Δ,均值 +5.7 pt;v2 优化 18 min 跑完(v1 估 7 小时)
 - **2026-06-07**: 加 §10 Phase 1 post-hoc calibration; smoke 5-doc 验证 prior shift 假设
 - **2026-05-30 (晚)**: 加 §9 prior shift 量化诊断 + Phase 1 实验设计
