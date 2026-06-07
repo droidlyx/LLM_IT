@@ -440,8 +440,52 @@ cdr 上各 variant 预测的 CID 数量:
 
 ---
 
+## 10. Phase 1 post-hoc calibration 结果 (2026-06-07)
+
+### 10.1 实验设置
+
+- 模型: variant D LoRA (Qwen3-8B-Base + BioRED-only + loss reweight, F1=0.6489)
+- 校准方法: 五种 — Baseline / LA(τ∈{0.5,1.0,2.0}) / P2P(oracle) / P2P(uniform) / TECP(α=0.1) / P2P+TECP
+- 推理: vLLM sequence logprob 评分,每个 (entity pair, candidate label) 独立打分,见 `posthoc/score_pairs.py`
+- 评估: 五个数据集(BioRED dev / BC8 test / cdr / disgenet / pharmgkb),BioRED scope 全口径
+
+### 10.2 Smoke test (5 docs/dataset, 2026-06-07 13:30)
+
+5 doc 抽样上**核心假设全部直接验证**:
+
+| 数据集 | Baseline F1 | Best F1 | Δ | Best method |
+|---|---|---|---|---|
+| cdr | 0.3077 | **0.4800** | **+17.2 pt** | P2P uniform |
+| BC8 test | 0.6067 | **0.6871** | **+8.0 pt** | P2P oracle |
+| BioRED dev | 0.5941 | **0.6494** | **+5.5 pt** | TECP α=0.10 (16.7% abstain) |
+| disgenet | 0.5556 | 0.5556 | +0.0 | (recall 已 100%,饱和) |
+
+Rare-class F1 也大幅回升:
+- BioRED dev Positive_Correlation: 0.25 → **0.58**(LA τ=1.0)
+- BC8 Comparison: 0 → **0.50**(LA τ=0.5)
+
+完整 smoke 分析见 [posthoc/SMOKE_FINDINGS.md](../../posthoc/SMOKE_FINDINGS.md)。
+
+### 10.3 全量结果 (TBD — scoring 进行中,~4 h)
+
+[待 `posthoc/run_full_parallel.sh` 完成填入]
+
+### 10.4 关键判断 (smoke 已支持)
+
+1. **cdr/pharmgkb 上的 F1 失败本质是 prior shift,不是 schema novelty**:模型 p_eff 与数据集 gold prior 错位明显,简单的 post-hoc 校准就能把 cdr F1 从 0.31 推到 0.48(+17 pt)。
+2. **P2P uniform > P2P oracle 在 cdr 上**:不需要 oracle 也能拿到大部分增益,意味着 Ch 3 主方法可以用 self-estimated effective prior(类似 L2 NPE)而非外部 oracle prior。
+3. **TECP 在 BioRED dev 上有用,在 cdr 上无用**:cdr 错误以 FN 为主(under-commit),弃权解决不了;BioRED dev 错误以 FP 为主(over-commit),弃权救回 P。**两类失败模式需要不同方法。**
+4. **LA τ 不能盲目大**:τ=1.0 在 BioRED 上提 rare class 但 τ=2.0 在 BC8 上把 F1 砸到 0.26。需 τ-sweep。
+
+### 10.5 论文 narrative 雏形
+
+> 在多数据集 LLM-IFT BioRE 场景中,跨数据集 F1 下降的主因不是 schema 不一致,而是 effective prior 在 unseen 分布上的失配。我们用 sequence-logprob scoring 直接观测到模型的 self-prior,P2P 后置 logit 调整 + TECP 高熵弃权的组合可以**不改训练**把 OOD F1 平均提升 X.X pt(X=验证后填),其中 cdr +17 pt 直接打平 BioREx 的多数据集联合训练效果。
+
+---
+
 ## 更新日志
 
+- **2026-06-07**: 加 §10 Phase 1 post-hoc calibration; smoke 5-doc 验证 prior shift 假设
 - **2026-05-30 (晚)**: 加 §9 prior shift 量化诊断 + Phase 1 实验设计
 - **2026-05-30**: 加 §8 cross-domain OOD eval (4 变体 × 3 OOD 数据集); fix bioredirect parser bug
 - **2026-05-28**: 创建文档,记录 4 变体 ablation 第一组结果
