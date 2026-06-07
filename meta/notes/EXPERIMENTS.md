@@ -466,45 +466,42 @@ Rare-class F1 也大幅回升:
 
 完整 smoke 分析见 [posthoc/SMOKE_FINDINGS.md](../../posthoc/SMOKE_FINDINGS.md)。
 
-### 10.3 全量结果 — v3 multi-pair (2026-06-07,**deployment-faithful**)
+### 10.3 全量结果 — v3 multi-pair + bidirectional eval (2026-06-07,**最终 paper-grade**)
 
-**这是最终的 paper-grade 数字。v2 single-pair 的 +5.7 pt mean Δ 已被否定**(详见 §10.8)。
+**这是最终的 paper-grade 数字。v2 single-pair 的 +5.7 pt mean Δ 已被否定;v3 第一版 +1.08 pt mean Δ 也部分被 evaluation aggregation bug 高估,正确的 mean Δ 是 +0.88 pt。**
 
-总跑时:**18 分钟**(v3 multi-pair,2 张 4090 并行;state-machine line parser 100% coverage 在 BC8 / OOD 上,BioRED dev 99.5%)
+**Baseline F1 已经跟 test_llm.py 严格匹配**(4/5 数据集 Δ < 0.001):
+
+| 数据集 | test_llm.py | v3 fixed | Δ |
+|---|---|---|---|
+| BioRED dev | 0.6478 | 0.6487 | +0.001 ✅ |
+| BC8 test | 0.5640 | 0.5654 | +0.001 ✅ |
+| cdr | 0.4209 | 0.4714 | +0.050 ⚠ |
+| disgenet | 0.8485 | 0.8485 | 0.000 ✅ |
+| pharmgkb | 0.2565 | 0.2552 | -0.001 ✅ |
+
+cdr 多 5pt 原因:**test_llm.py 用 substring matching**(`'cid' in pred_rel.lower()`),当模型在 cdr OOD 上有时输出非 CID 标签(如 "Association")时,test_llm.py 当 None;**v3 在 {None, CID} 候选里用 logprob 选**。evaluation 路径不同,model 行为相同,不可同口径比较 —— 但同一 v3 pipeline 内 baseline vs 校准 Δ 仍可信。
+
+**主表 (deployment-faithful Δ)**:
 
 | 数据集 | n_pairs | Baseline F1 | Best F1 | Δ | Method |
 |---|---|---|---|---|---|
-| BioRED dev (processed_test) | 20,263 | 0.6062 | **0.6068** | **+0.05 pt** | P2P_oracle |
-| BC8 test | 82,392 | 0.5519 | **0.5647** | **+1.28 pt** | P2P_oracle |
-| **cdr** (BC5CDR) | 75,313 | 0.3842 | **0.4577** | **+7.35 pt** | LA τ=0.5 |
-| disgenet | 3,912 | 0.8657 | **0.8672** | **+0.15 pt** | P2P_uniform |
-| pharmgkb | 88,336 | 0.2606 | **0.2794** | **+1.88 pt** | P2P_oracle |
+| BioRED dev (processed_test) | 20,376 | **0.6487** | 0.6487 | **0.0000** | baseline |
+| BC8 test | 83,314 | **0.5654** | 0.5704 | **+0.50 pt** | P2P_oracle |
+| **cdr** (BC5CDR) | 75,332 | **0.4714** | 0.5095 | **+3.82 pt** | LA τ=0.5 |
+| disgenet | 3,912 | **0.8485** | 0.8489 | **+0.05 pt** | LA τ=2.0 |
+| pharmgkb | 88,448 | **0.2552** | 0.2552 | **0.0000** | baseline |
 
-**Baseline vs test_llm.py 复现 F1** — 验证 v3 是 deployment-faithful:
+**Mean Δ across 5 datasets = +0.875 pt** (被 cdr +3.82 pt 拉起,其他 4 数据集合计 +0.55 pt)。
 
-| 数据集 | test_llm.py (multi-pair, 复现) | v3 multi-pair baseline | 差距 |
-|---|---|---|---|
-| BioRED dev | 0.6478 | 0.6062 | -4.2 pt |
-| BC8 test | 0.5640 | 0.5519 | -1.2 pt |
-| cdr | 0.4209 (历史) | 0.3842 | -3.7 pt |
-| disgenet | 0.8485 | 0.8657 | +1.7 pt |
-| pharmgkb | 0.2565 | 0.2606 | +0.4 pt |
-
-差距 ~3-4 pt 来源(可解):
-1. v3 漏掉 multi-rel 标签(test_llm 加入每对的所有 rel,v3 只保留第一个非-None)
-2. 0.5-1% drift 在 BC8 上未识别的 pair
-3. eval_adjusted 用 pair-level micro,test_llm.py 用 direction-duplicated micro
-
-方向一致,绝对值有可控偏差。
-
-**方法均值排名 (5 数据集 Δ 平均)**:
+**方法均值排名(5 数据集 Δ)**:
 
 | 方法 | Mean Δ | 每集 Δ |
 |---|---|---|
-| **P2P_oracle** | **+1.08 pt** | +0.001, +0.013, +0.021, +0.001, +0.019 |
-| LA τ=0.5 | -0.81 pt | -0.015, -0.017, +0.073, -0.004, -0.077 |
-| P2P_uniform | -4.08 pt | -0.108, -0.066, +0.047, +0.001, -0.079 |
-| LA τ=1.0 | -5.33 pt | -0.110, -0.087, +0.054, -0.007, -0.115 |
+| **P2P_oracle** | **+0.25 pt** | -0.006, +0.005, +0.018, -0.002, -0.002 |
+| LA τ=0.5 | -0.29 pt | -0.020, -0.018, +0.038, +0.000, -0.015 |
+| P2P_uniform | -3.56 pt | -0.090, -0.059, -0.009, +0.000, -0.020 |
+| LA τ=1.0 | -3.99 pt | -0.094, -0.071, -0.001, +0.000, -0.046 |
 | LA τ=2.0 | -18.59 pt | |
 | TECP | -30.22 pt | |
 | P2P+TECP | -30.67 pt | |
@@ -685,7 +682,8 @@ Smoke 验证方向**全部正确**,只在最小数据集 cdr 上幅度高估 —
 
 ## 更新日志
 
-- **2026-06-07 (深夜)**: §10 重做 — v2 single-pair 数字否定 (artifact),v3 multi-pair 才是 deployment-faithful;P2P_oracle 均值 +1.08 pt,cdr LA τ=0.5 +7.35 pt (最大单点增益)
+- **2026-06-07 (深深夜)**: §10.3 最终修正 — v3 + bidirectional eval (匹配 test_llm.py),baseline F1 跟 0.6478 严格一致;P2P_oracle 均值仅 +0.25 pt,cdr LA τ=0.5 +3.82 pt 是唯一显著真实增益
+- **2026-06-07 (深夜)**: §10 重做 — v2 single-pair 数字否定 (artifact),v3 multi-pair 才是 deployment-faithful
 - **2026-06-07 (晚)**: §10 全量结果填入 — P2P_oracle 5/5 数据集均 +Δ,均值 +5.7 pt;v2 优化 18 min 跑完(v1 估 7 小时)
 - **2026-06-07**: 加 §10 Phase 1 post-hoc calibration; smoke 5-doc 验证 prior shift 假设
 - **2026-05-30 (晚)**: 加 §9 prior shift 量化诊断 + Phase 1 实验设计

@@ -172,22 +172,22 @@ def compute_candidate_first_tokens(candidates, tokenizer):
 
 
 def find_label_positions(generated_token_ids, tokenizer):
-    """Walk generated tokens via state machine to handle both:
-      single-digit lines: [\n, N, ., ' ', ' label']  (explicit space + BPE-space)
-      double-digit lines: [\n, '1', '0', ., ' label']  (no explicit space)
+    """Walk generated tokens via state machine. Each line follows pattern:
+      [\\n]? + digits + '.' + (optional whitespace tokens) + label_first_tok
+
+    Line 1 has no leading newline (model starts with "1."). Lines 2+ start
+    with "\\n". Both single-digit and double-digit line numbers are handled.
 
     Returns dict {line_num: token_idx_of_label_first_token}.
 
-    Pre-pended "1. " puts line 1 label at position 0.
-
     State machine:
-      0 = idle, looking for \n
-      1 = after \n, expecting digit
+      0 = idle, looking for \\n OR (at very start) for digit
+      1 = after \\n or at start, expecting digit
       2 = accumulating digits or expecting .
       3 = after ., skipping whitespace tokens, will capture first non-ws
     """
-    positions = {1: 0}
-    state = 0
+    positions = {}
+    state = 1  # at start, expect digit
     line_num_buf = ""
     for tok_idx, tid in enumerate(generated_token_ids):
         s = tokenizer.decode([tid])
@@ -256,10 +256,8 @@ def score_jobs_v3(args, queries_per_doc):
 
     # Pre-compute first-token IDs per unique candidate set
     cand_tok_cache = {}
-    answer_prefix = "1. "
-    ans_prefix_ids = tokenizer.encode(answer_prefix, add_special_tokens=False)
 
-    # Build requests
+    # Build requests — no '1. ' pre-pend; model generates "1. {label}\n..." naturally
     requests = []
     for entry in queries_per_doc:
         doc_idx, query = entry['doc_idx'], entry['query']
@@ -270,11 +268,10 @@ def score_jobs_v3(args, queries_per_doc):
             )
         chat_prompt = build_chat_prompt(query['prompt'], tokenizer)
         chat_ids = tokenizer.encode(chat_prompt, add_special_tokens=False)
-        full_prefix = chat_ids + ans_prefix_ids
         requests.append({
             'doc_idx': doc_idx,
             'query': query,
-            'prompt_token_ids': full_prefix,
+            'prompt_token_ids': chat_ids,
         })
 
     # Pre-allocate per-doc outputs: doc_idx -> { (h, t): {label: logprob} }
