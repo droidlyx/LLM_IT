@@ -482,17 +482,22 @@ Rare-class F1 也大幅回升:
 
 cdr 多 5pt 原因:**test_llm.py 用 substring matching**(`'cid' in pred_rel.lower()`),当模型在 cdr OOD 上有时输出非 CID 标签(如 "Association")时,test_llm.py 当 None;**v3 在 {None, CID} 候选里用 logprob 选**。evaluation 路径不同,model 行为相同,不可同口径比较 —— 但同一 v3 pipeline 内 baseline vs 校准 Δ 仍可信。
 
-**主表 (deployment-faithful Δ)**:
+**主表 (deployment-faithful Δ, 双口径)**:
 
-| 数据集 | n_pairs | Baseline F1 | Best F1 | Δ | Method |
+| 数据集 | FULL baseline | FULL best (Δ) | BIOREX baseline | BIOREX best (Δ) | Best method |
 |---|---|---|---|---|---|
-| BioRED dev (processed_test) | 20,376 | **0.6487** | 0.6487 | **0.0000** | baseline |
-| BC8 test | 83,314 | **0.5654** | 0.5704 | **+0.50 pt** | P2P_oracle |
-| **cdr** (BC5CDR) | 75,332 | **0.4714** | 0.5095 | **+3.82 pt** | LA τ=0.5 |
-| disgenet | 3,912 | **0.8485** | 0.8489 | **+0.05 pt** | LA τ=2.0 |
-| pharmgkb | 88,448 | **0.2552** | 0.2552 | **0.0000** | baseline |
+| BioRED dev | 0.6487 | 0.6487 (**0**) | 0.6878 | 0.6878 (**0**) | baseline |
+| BC8 test | 0.5654 | 0.5704 (+0.5) | 0.6059 | 0.6064 (+0.05) | P2P_oracle |
+| **cdr** | 0.4714 | **0.5095 (+3.82)** | 0.4714 | **0.5095 (+3.82)** | LA τ=0.5 |
+| disgenet | 0.8485 | 0.8489 (+0.05) | 0.9888 | 0.9906 (+0.18) | LA τ=2.0 |
+| **pharmgkb** | 0.2552 | 0.2552 (**0**) | 0.8372 | **0.9305 (+9.33)** | LA τ=1.0 |
 
-**Mean Δ across 5 datasets = +0.875 pt** (被 cdr +3.82 pt 拉起,其他 4 数据集合计 +0.55 pt)。
+- **FULL scope mean Δ = +0.88 pt**(过严,因为包含 model 不会的 Variant pair)
+- **BIOREX scope mean Δ = +2.68 pt**(更公平,只算 5 种 BioREx-compatible pair type:Chem-Chem / Chem-Disease / Chem-Gene / Disease-Gene / Gene-Gene)
+
+**两个真实大增益**:
+- **cdr +3.82 pt** LA τ=0.5 — binary label space (CID),autoregressive context 帮不了
+- **pharmgkb BIOREX +9.33 pt** LA τ=1.0 — 把 model 在 Gene/Chem/Disease pair 上的过保守拉回,recall 7.34 → 9.21
 
 **方法均值排名(5 数据集 Δ)**:
 
@@ -682,6 +687,7 @@ Smoke 验证方向**全部正确**,只在最小数据集 cdr 上幅度高估 —
 
 ## 更新日志
 
+- **2026-06-07 (最深夜)**: 加入 BIOREX scope eval — 5 数据集 baseline 全部跟 test_llm.py 双口径数字一致 (除 cdr 因 substring vs logprob 5pt 偏移);发现 pharmgkb BIOREX 上 LA τ=1.0 +9.33 pt 大增益(此前 FULL scope 漏看)
 - **2026-06-07 (深深夜)**: §10.3 最终修正 — v3 + bidirectional eval (匹配 test_llm.py),baseline F1 跟 0.6478 严格一致;P2P_oracle 均值仅 +0.25 pt,cdr LA τ=0.5 +3.82 pt 是唯一显著真实增益
 - **2026-06-07 (深夜)**: §10 重做 — v2 single-pair 数字否定 (artifact),v3 multi-pair 才是 deployment-faithful
 - **2026-06-07 (晚)**: §10 全量结果填入 — P2P_oracle 5/5 数据集均 +Δ,均值 +5.7 pt;v2 优化 18 min 跑完(v1 估 7 小时)

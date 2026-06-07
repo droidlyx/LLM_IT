@@ -35,16 +35,36 @@ from posthoc_methods import (
 )
 
 
+BIOREX_PAIR_TYPES = {
+    frozenset(['Chemical', 'Chemical']),
+    frozenset(['Chemical', 'Disease']),
+    frozenset(['Chemical', 'Gene']),
+    frozenset(['Disease', 'Gene']),
+    frozenset(['Gene', 'Gene']),
+}
+
+
+def _is_biorex(m: dict) -> bool:
+    return frozenset([m['h_type'], m['t_type']]) in BIOREX_PAIR_TYPES
+
+
 def bidirectional_prf(preds: np.ndarray, pairs_meta: list,
-                       use_direction: bool, none_idx: int = 0) -> PRF:
+                       use_direction: bool, none_idx: int = 0,
+                       biorex_only: bool = False) -> PRF:
     """Compute micro PRF matching test_llm.py semantics.
 
     For use_direction=False: each per-direction non-None prediction is
     duplicated to (t, h) too. Same for gold.
+
+    If biorex_only=True, restrict to BioREx-compatible pair types
+    (Chem-Chem, Chem-Disease, Chem-Gene, Disease-Gene, Gene-Gene) for
+    direct comparison against BioREx-paper F1.
     """
     pred_set = set()
     gold_set = set()
     for i, m in enumerate(pairs_meta):
+        if biorex_only and not _is_biorex(m):
+            continue
         di, h, t = m['doc_idx'], m['h'], m['t']
         p = int(preds[i])
         g = int(m['gold'])
@@ -177,10 +197,13 @@ def main():
     # ---------- Baseline ----------
     preds_base = baseline_argmax(logits)
     prf_base = bidirectional_prf(preds_base, pairs_meta, args.use_direction, none_idx=none_idx)
+    prf_base_bx = bidirectional_prf(preds_base, pairs_meta, args.use_direction, none_idx=none_idx, biorex_only=True)
     pc_base = bidirectional_per_class_prf(preds_base, pairs_meta, candidates, args.use_direction, none_idx=none_idx)
-    print(f"\n[Baseline argmax]              {prf_base}")
+    print(f"\n[Baseline argmax]              FULL   {prf_base}")
+    print(f"                               BIOREX {prf_base_bx}")
     results['baseline'] = {
         'micro': vars(prf_base),
+        'micro_biorex': vars(prf_base_bx),
         'per_class': {k: vars(v) for k, v in pc_base.items()},
         'pred_distribution': Counter(preds_base.tolist()),
     }
@@ -192,22 +215,29 @@ def main():
         tau = float(tau_str)
         preds_la, _ = logit_adjust(logits, p_train_oracle, tau=tau)
         prf_la = bidirectional_prf(preds_la, pairs_meta, args.use_direction, none_idx=none_idx)
+        prf_la_bx = bidirectional_prf(preds_la, pairs_meta, args.use_direction, none_idx=none_idx, biorex_only=True)
         pc_la = bidirectional_per_class_prf(preds_la, pairs_meta, candidates, args.use_direction, none_idx=none_idx)
-        print(f"[LA  tau={tau:.1f} oracle p_train]   {prf_la}  Δf1={prf_la.f1 - prf_base.f1:+.4f}")
+        print(f"[LA  tau={tau:.1f}] FULL   {prf_la}  Δ={prf_la.f1 - prf_base.f1:+.4f}")
+        print(f"           BIOREX {prf_la_bx}  Δ={prf_la_bx.f1 - prf_base_bx.f1:+.4f}")
         results[f'LA_tau{tau:.1f}'] = {
-            'micro': vars(prf_la), 'tau': tau,
+            'micro': vars(prf_la),
+            'micro_biorex': vars(prf_la_bx),
+            'tau': tau,
             'per_class': {k: vars(v) for k, v in pc_la.items()},
         }
 
     # ---------- P2P with oracle p_target ----------
     preds_p2p, p2p_meta = p2p_adjust(logits, p_target=p_train_oracle)
     prf_p2p = bidirectional_prf(preds_p2p, pairs_meta, args.use_direction, none_idx=none_idx)
+    prf_p2p_bx = bidirectional_prf(preds_p2p, pairs_meta, args.use_direction, none_idx=none_idx, biorex_only=True)
     pc_p2p = bidirectional_per_class_prf(preds_p2p, pairs_meta, candidates, args.use_direction, none_idx=none_idx)
-    print(f"[P2P oracle p_target]          {prf_p2p}  Δf1={prf_p2p.f1 - prf_base.f1:+.4f}")
+    print(f"[P2P oracle] FULL   {prf_p2p}  Δ={prf_p2p.f1 - prf_base.f1:+.4f}")
+    print(f"             BIOREX {prf_p2p_bx}  Δ={prf_p2p_bx.f1 - prf_base_bx.f1:+.4f}")
     print(f"  p_eff (self-estimated): {np.round(p2p_meta['p_eff'], 4)}")
     print(f"  adjustment vector:      {np.round(p2p_meta['adjustment'], 4)}")
     results['P2P_oracle'] = {
         'micro': vars(prf_p2p),
+        'micro_biorex': vars(prf_p2p_bx),
         'p_eff': p2p_meta['p_eff'],
         'p_target': p2p_meta['p_target'],
         'per_class': {k: vars(v) for k, v in pc_p2p.items()},
